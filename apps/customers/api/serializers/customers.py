@@ -9,6 +9,7 @@ from apps.accounts.validators import (
     PhoneNumberField,
     resolve_region_from_country,
     normalize_phone_number,
+    validate_person_name,
 )
 
 import phonenumbers
@@ -215,11 +216,9 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         return normalized
 
     def validate_contact_person(self, value):
-        value = " ".join(value.split())
-        if not value:
-            raise serializers.ValidationError(
-                "Contact person cannot be blank."
-            )
+        value = validate_person_name(
+            value, field_name="Contact person", allow_blank=False
+        )
         parts = value.split(maxsplit=1)
         if len(parts[0]) > 150:
             raise serializers.ValidationError(

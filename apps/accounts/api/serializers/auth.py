@@ -10,7 +10,11 @@ from apps.accounts.api.serializers.users import (
 )
 from drf_spectacular.utils import extend_schema_field
 
-from apps.accounts.validators import PhoneNumberField, normalize_phone_number
+from apps.accounts.validators import (
+    PhoneNumberField,
+    normalize_phone_number,
+    validate_person_name,
+)
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from collections.abc import Mapping
@@ -168,7 +172,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             })
 
         attrs["customer"] = normalize_company_name(attrs["customer"])
-        attrs["contact_person"] = attrs["contact_person"].strip()
         attrs["phone"] = normalize_phone_number(
             attrs["phone"],
             country=attrs.get("country"),
@@ -179,9 +182,18 @@ class RegisterSerializer(serializers.ModelSerializer):
                 "customer": "Customer or Company name is required."
             })
 
-        if not attrs["contact_person"]:
+        if not attrs.get("contact_person") or not str(attrs["contact_person"]).strip():
             raise serializers.ValidationError({
                 "contact_person": "Contact person is required."
+            })
+
+        try:
+            attrs["contact_person"] = validate_person_name(
+                attrs["contact_person"], field_name="Contact person", allow_blank=False
+            )
+        except serializers.ValidationError as exc:
+            raise serializers.ValidationError({
+                "contact_person": exc.detail
             })
 
         name_parts = attrs["contact_person"].strip().split(maxsplit=1)

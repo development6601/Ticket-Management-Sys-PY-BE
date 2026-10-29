@@ -1,7 +1,79 @@
+import re
 from collections.abc import Mapping
 
 import phonenumbers
 from rest_framework import serializers
+
+NAME_REGEX = re.compile(r"^[a-zA-Z\u00C0-\u017F\s\x27\.-]+$")
+
+
+def validate_person_name(value, field_name="Name", allow_blank=False):
+    if not isinstance(value, str):
+        raise serializers.ValidationError(f"{field_name} must be a string.")
+
+    trimmed = " ".join(value.strip().split())
+    if not trimmed:
+        if allow_blank:
+            return ""
+        raise serializers.ValidationError(f"{field_name} cannot be blank.")
+
+    if any(char.isdigit() for char in trimmed):
+        raise serializers.ValidationError(f"{field_name} cannot contain numbers.")
+
+    if not any(char.isalpha() for char in trimmed) or not NAME_REGEX.match(trimmed):
+        raise serializers.ValidationError(
+            f"{field_name} can only contain letters, spaces, hyphens, and apostrophes."
+        )
+
+    return trimmed
+
+
+def validate_role_name(value):
+    return validate_person_name(value, field_name="Role name", allow_blank=False)
+
+
+PERMISSION_NAME_REGEX = re.compile(r"^[a-zA-Z\u00C0-\u017F\s\._-]+$")
+IDENTIFIER_NAME_REGEX = re.compile(r"^[a-zA-Z\u00C0-\u017F_-]+$")
+
+
+def validate_permission_name(value):
+    if not isinstance(value, str):
+        raise serializers.ValidationError("Permission name must be a string.")
+
+    trimmed = " ".join(value.strip().split())
+    if not trimmed:
+        raise serializers.ValidationError("Permission name cannot be blank.")
+
+    if any(char.isdigit() for char in trimmed):
+        raise serializers.ValidationError("Permission name cannot contain numbers.")
+
+    if not any(char.isalpha() for char in trimmed) or not PERMISSION_NAME_REGEX.match(trimmed):
+        raise serializers.ValidationError(
+            "Permission name can only contain letters, spaces, dots, underscores, and hyphens."
+        )
+
+    return trimmed
+
+
+def validate_identifier_name(value, field_name="Field"):
+    if not isinstance(value, str):
+        raise serializers.ValidationError(f"{field_name} must be a string.")
+
+    trimmed = value.strip()
+    if not trimmed:
+        raise serializers.ValidationError(f"{field_name} cannot be blank.")
+
+    if any(char.isdigit() for char in trimmed):
+        raise serializers.ValidationError(f"{field_name} cannot contain numbers.")
+
+    if not any(char.isalpha() for char in trimmed) or not IDENTIFIER_NAME_REGEX.match(trimmed):
+        raise serializers.ValidationError(
+            f"{field_name} can only contain letters, underscores, and hyphens."
+        )
+
+    return trimmed
+
+
 
 
 COUNTRY_TO_REGION = {

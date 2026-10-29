@@ -2,6 +2,7 @@ import uuid
 
 from collections.abc import Mapping
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django.db.models import Q
@@ -453,11 +454,18 @@ class CustomerDetailView(APIView):
 
         try:
             if "email" in serializer.validated_data:
-                CustomerUpdateService.request_email_change(
+                _, raw_token = CustomerUpdateService.request_email_change(
                     customer_id=customer.pk,
                     new_email=serializer.validated_data["email"],
                     performed_by=request.user,
                 )
+
+                resp_data = {
+                    "email_change_pending": True,
+                }
+                if getattr(settings, "EXPOSE_TEST_TOKENS", False) and raw_token:
+                    resp_data["_test_token"] = raw_token
+                    resp_data["_test_verify_url"] = f"/api/v1/auth/verify-email/?token={raw_token}"
 
                 return Response(
                     {
@@ -466,9 +474,7 @@ class CustomerDetailView(APIView):
                             "A verification link has been sent "
                             "to the new email address."
                         ),
-                        "data": {
-                            "email_change_pending": True,
-                        },
+                        "data": resp_data,
                     },
                     status=status.HTTP_202_ACCEPTED,
                 )
@@ -567,16 +573,21 @@ class CustomerStatusView(APIView):
         else:
             message = "Company deactivated successfully."
 
+        resp_data = {
+            "id": str(customer.id),
+            "is_active": customer.is_active,
+            "account_status": customer.account_status,
+            "activation_pending": activation_pending,
+        }
+        if getattr(settings, "EXPOSE_TEST_TOKENS", False) and result.get("raw_token"):
+            resp_data["_test_token"] = result["raw_token"]
+            resp_data["_test_verify_url"] = f"/api/v1/auth/verify-email/?token={result['raw_token']}"
+
         return Response(
             {
                 "success": True,
                 "message": message,
-                "data": {
-                    "id": str(customer.id),
-                    "is_active": customer.is_active,
-                    "account_status": customer.account_status,
-                    "activation_pending": activation_pending,
-                },
+                "data": resp_data,
             },
             status=(
                 status.HTTP_202_ACCEPTED

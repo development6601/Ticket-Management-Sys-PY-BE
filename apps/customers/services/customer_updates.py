@@ -504,10 +504,16 @@ class CustomerUpdateService:
             user_fields = []
 
             if "contact_person" in data:
-                contact_person_val = " ".join(data["contact_person"].split())
-                if not contact_person_val:
+                from apps.accounts.validators import validate_person_name
+                try:
+                    contact_person_val = validate_person_name(
+                        data["contact_person"],
+                        field_name="Contact person",
+                        allow_blank=False,
+                    )
+                except serializers.ValidationError as exc:
                     raise ValidationError({
-                        "contact_person": ["Contact person cannot be blank."]
+                        "contact_person": exc.detail
                     })
                 parts = contact_person_val.split(maxsplit=1)
                 if len(parts[0]) > 150:

@@ -11,6 +11,7 @@ from apps.accounts.services.authentication import AuthenticationService
 from apps.accounts.api.serializers.users import UserResponseSerializer
 from apps.accounts.models import EmailVerificationRequest
 
+from django.conf import settings
 from django.db import transaction
 
 
@@ -45,13 +46,16 @@ class RegisterView(APIView):
             }
         )
 
+        response_data = dict(response_serializer.data)
+        if getattr(settings, "EXPOSE_TEST_TOKENS", False):
+            response_data["_test_token"] = raw_token
+            response_data["_test_verify_url"] = f"/api/v1/auth/verify-email/?token={raw_token}"
+
         return Response(
             {
                 "success": True,
                 "message": "Registration successful. Please verify your email.",
-                "data": {
-                    **response_serializer.data,
-                },
+                "data": response_data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -178,7 +182,7 @@ class ResendVerificationView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            AuthenticationService.resend_email_verification(
+            raw_token = AuthenticationService.resend_email_verification(
                 email=serializer.validated_data["email"]
             )
         except DjangoValidationError as exc:
@@ -186,16 +190,20 @@ class ResendVerificationView(APIView):
                 "email": exc.messages,
             })
 
-        return Response(
-            {
-                "success": True,
-                "message": (
-                    "If the account requires verification, "
-                    "a verification email has been sent."
-                ),
-            },
-            status=status.HTTP_200_OK,
-        )
+        response_payload = {
+            "success": True,
+            "message": (
+                "If the account requires verification, "
+                "a verification email has been sent."
+            ),
+        }
+        if getattr(settings, "EXPOSE_TEST_TOKENS", False) and raw_token:
+            response_payload["data"] = {
+                "_test_token": raw_token,
+                "_test_verify_url": f"/api/v1/auth/verify-email/?token={raw_token}",
+            }
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 #login view
@@ -357,20 +365,24 @@ class ForgotPasswordView(APIView):
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        AuthenticationService.forgot_password(
+        raw_token = AuthenticationService.forgot_password(
             email=serializer.validated_data["email"]
         )
 
-        return Response(
-            {
-                "success": True,
-                "message": (
-                    "If an account exists with this email, "
-                    "a password reset link has been sent."
-                ),
-            },
-            status=status.HTTP_200_OK,
-        )
+        response_payload = {
+            "success": True,
+            "message": (
+                "If an account exists with this email, "
+                "a password reset link has been sent."
+            ),
+        }
+        if getattr(settings, "EXPOSE_TEST_TOKENS", False) and raw_token:
+            response_payload["data"] = {
+                "_test_token": raw_token,
+                "_test_reset_endpoint": "/api/v1/auth/password/reset/",
+            }
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class ResetPasswordView(APIView):
@@ -470,20 +482,23 @@ class PasswordSetupView(APIView):
         data = serializer.validated_data
 
         if data.get("action") == "renew":
-            AuthenticationService.resend_expired_password_setup(
+            user, raw_token = AuthenticationService.resend_expired_password_setup(
                 raw_token=data["token"]
             )
 
-            return Response(
-                {
-                    "success": True,
-                    "message": (
-                        "A new password setup link has been "
-                        "sent to your registered email."
-                    ),
-                },
-                status=status.HTTP_200_OK,
-            )
+            response_payload = {
+                "success": True,
+                "message": (
+                    "A new password setup link has been "
+                    "sent to your registered email."
+                ),
+            }
+            if getattr(settings, "EXPOSE_TEST_TOKENS", False) and raw_token:
+                response_payload["data"] = {
+                    "_test_token": raw_token,
+                }
+
+            return Response(response_payload, status=status.HTTP_200_OK)
 
         AuthenticationService.setup_password(
             raw_token=data["token"],

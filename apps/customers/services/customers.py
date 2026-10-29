@@ -145,6 +145,7 @@ class CustomerStatusService:
             return {
                 "customer": customer,
                 "activation_pending": True,
+                "raw_token": raw_token,
             }
 
         # Immediate company deactivation.

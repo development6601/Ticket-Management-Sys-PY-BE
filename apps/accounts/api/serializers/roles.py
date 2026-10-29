@@ -5,6 +5,7 @@ from rest_framework import serializers
 from collections.abc import Mapping
 import re
 from apps.accounts.models import Role
+from apps.accounts.validators import validate_role_name
 
 class RoleListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -87,7 +88,7 @@ class CreateRoleSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_name(self, value):
-        name = value.strip()
+        name = validate_role_name(value)
         if Role.objects.filter(name__iexact=name).exists():
             raise serializers.ValidationError(
                 "A role with this name already exists."
@@ -147,7 +148,7 @@ class UpdateRoleSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_name(self, value):
-        name = value.strip()
+        name = validate_role_name(value)
 
         if Role.objects.filter(
             name__iexact=name

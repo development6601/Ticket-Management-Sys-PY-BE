@@ -18,6 +18,7 @@ from apps.accounts.services.users import UserService
 from apps.accounts.models import User, UserRole
 from apps.accounts.permissions.rbac import *
 from apps.accounts.permissions.constants import *
+from django.conf import settings
 from django.db.models import Q
 
 from apps.customers.models import Customer, CustomerUser
@@ -395,6 +396,8 @@ class UserListView(APIView):
             validated_data=serializer.validated_data,
         )
 
+        setup_token = getattr(user, "_password_setup_token", None)
+
         user = (
             User.objects
             .select_related("user_role__role").prefetch_related("customer_members__customer")
@@ -408,10 +411,13 @@ class UserListView(APIView):
                 .get(user=user, is_primary_contact=True)
             )
 
-            response_data = RegisterDataSerializer({
+            response_data = dict(RegisterDataSerializer({
                 "customer": membership.customer,
                 "primary_user": user,
-            }).data
+            }).data)
+
+            if getattr(settings, "EXPOSE_TEST_TOKENS", False) and setup_token:
+                response_data["_test_token"] = setup_token
 
             return Response(
                 {
@@ -425,11 +431,15 @@ class UserListView(APIView):
                 status=status.HTTP_201_CREATED,
             )
 
+        resp_data = dict(UserListSerializer(user).data)
+        if getattr(settings, "EXPOSE_TEST_TOKENS", False) and setup_token:
+            resp_data["_test_token"] = setup_token
+
         return Response(
             {
                 "success": True,
                 "message": "User created successfully.",
-                "data": UserListSerializer(user).data,
+                "data": resp_data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -624,14 +634,19 @@ class UserStatusView(APIView):
         else:
             message = "User deactivated successfully."
 
+        resp_data = {
+            **UserListSerializer(updated_user).data,
+            "activation_pending": activation_pending,
+        }
+        if getattr(settings, "EXPOSE_TEST_TOKENS", False) and result.get("raw_token"):
+            resp_data["_test_token"] = result["raw_token"]
+            resp_data["_test_verify_url"] = f"/api/v1/auth/verify-email/?token={result['raw_token']}"
+
         return Response(
             {
                 "success": True,
                 "message": message,
-                "data": {
-                    **UserListSerializer(updated_user).data,
-                    "activation_pending": activation_pending,
-                },
+                "data": resp_data,
             },
             status=(
                 status.HTTP_202_ACCEPTED

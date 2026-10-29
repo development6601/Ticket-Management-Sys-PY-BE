@@ -33,6 +33,10 @@ if not SECRET_KEY:
 # Defaults to False (safe); set DEBUG=True in .env for local development.
 DEBUG = os.getenv("DEBUG", "False").strip().lower() in ("1", "true", "yes")
 
+# Expose verification/reset/setup tokens in API responses for QA testing
+# Defaults to True if DEBUG=True, or can be explicitly enabled via EXPOSE_TEST_TOKENS=True in Render
+EXPOSE_TEST_TOKENS = os.getenv("EXPOSE_TEST_TOKENS", "True" if DEBUG else "False").strip().lower() in ("1", "true", "yes")
+
 # Comma-separated list in .env, e.g. ALLOWED_HOSTS=example.com,www.example.com
 # ALLOWED_HOSTS = [
 #     https://8e94-103-251-59-157.ngrok-free.app/api/docs,    

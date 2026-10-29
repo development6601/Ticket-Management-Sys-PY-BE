@@ -4,6 +4,10 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import Permission
+from apps.accounts.validators import (
+    validate_permission_name,
+    validate_identifier_name,
+)
 
 class PermissionListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -75,7 +79,7 @@ class CreatePermissionSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_name(self, value):
-        name = value.strip()
+        name = validate_permission_name(value)
 
         if Permission.objects.filter(
             name__iexact=name
@@ -87,16 +91,10 @@ class CreatePermissionSerializer(serializers.ModelSerializer):
         return name 
 
     def validate_module(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError("Module cannot be blank.")
-        return value
+        return validate_identifier_name(value, field_name="Module")
 
     def validate_action(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError("Action cannot be blank.")
-        return value
+        return validate_identifier_name(value, field_name="Action")
 
     def validate_description(self, value):
         return value.strip() if value else value
@@ -146,7 +144,7 @@ class UpdatePermissionSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_name(self, value):
-        name = value.strip()
+        name = validate_permission_name(value)
 
         if Permission.objects.filter(
             name__iexact=name
@@ -160,16 +158,10 @@ class UpdatePermissionSerializer(serializers.ModelSerializer):
         return name
 
     def validate_module(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError("Module cannot be blank.")
-        return value
+        return validate_identifier_name(value, field_name="Module")
 
     def validate_action(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError("Action cannot be blank.")
-        return value
+        return validate_identifier_name(value, field_name="Action")
 
     def validate_description(self, value):
         return value.strip() if value else value

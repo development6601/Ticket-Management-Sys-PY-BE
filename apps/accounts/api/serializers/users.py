@@ -8,7 +8,11 @@ from apps.customers.models import Customer, CustomerUser, normalize_company_name
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from apps.accounts.validators import PhoneNumberField, normalize_phone_number
+from apps.accounts.validators import (
+    PhoneNumberField,
+    normalize_phone_number,
+    validate_person_name,
+)
 
 from apps.accounts.permissions.constants import *
 from apps.accounts.permissions.rbac import (
@@ -136,10 +140,10 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         ]
 
     def validate_first_name(self, value):
-        return value.strip()
+        return validate_person_name(value, field_name="First name", allow_blank=False)
 
     def validate_last_name(self, value):
-        return value.strip()
+        return validate_person_name(value, field_name="Last name", allow_blank=True)
 
     def validate(self, attrs):
         country = attrs.pop("country", None)
@@ -526,10 +530,10 @@ class UpdateUserSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_first_name(self, value):
-        return value.strip()
+        return validate_person_name(value, field_name="First name", allow_blank=False)
 
     def validate_last_name(self, value):
-        return value.strip()
+        return validate_person_name(value, field_name="Last name", allow_blank=True)
 
     def validate(self, attrs):
         country = attrs.pop("country", None)
@@ -832,7 +836,14 @@ class CreateUserSerializer(serializers.ModelSerializer):
                     "contact_person": "Contact person is required."
                 })
 
-            contact_person = contact_person.strip()
+            try:
+                contact_person = validate_person_name(
+                    contact_person, field_name="Contact person", allow_blank=False
+                )
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({
+                    "contact_person": exc.detail
+                })
 
             required_company_fields = (
                 "phone", "address", "state", "country"
@@ -970,10 +981,10 @@ class CreateUserSerializer(serializers.ModelSerializer):
         return email
 
     def validate_first_name(self, value):
-        return value.strip()
+        return validate_person_name(value, field_name="First name", allow_blank=False)
 
     def validate_last_name(self, value):
-        return value.strip()
+        return validate_person_name(value, field_name="Last name", allow_blank=True)
 
 
     def _get_authenticated_customer_user(self):

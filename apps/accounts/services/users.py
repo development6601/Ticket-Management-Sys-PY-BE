@@ -429,10 +429,11 @@ class UserService:
                 is_primary_contact=(customer_data is not None),
             )
 
-            AuthenticationService.send_password_setup_email(
+            raw_token = AuthenticationService.send_password_setup_email(
                 user=user,
                 expires_in_hours=72,
             )
+            user._password_setup_token = raw_token
 
         return user
 
@@ -706,6 +707,7 @@ class UserService:
             return {
                 "user": user,
                 "activation_pending": True,
+                "raw_token": raw_token,
             }
 
         if is_active:

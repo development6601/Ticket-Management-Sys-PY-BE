@@ -699,8 +699,7 @@ class AuthenticationService:
             status="PENDING",
         )
 
-        # The token is only delivered by email; never return it.
-        return None
+        return raw_token
 
 
 
@@ -934,7 +933,7 @@ class AuthenticationService:
             status=EmailJob.Status.PENDING,
         )
 
-        return None
+        return raw_token
 
 
     #RESET PASSWORD
@@ -1536,10 +1535,10 @@ class AuthenticationService:
             })
 
         # Reuse the existing token generation and email queue workflow.
-        AuthenticationService.send_password_setup_email(
+        raw_token = AuthenticationService.send_password_setup_email(
             user=user,
             expires_in_hours=72,
             is_resend=True,
         )
 
-        return user
+        return user, raw_token
