@@ -1,0 +1,17 @@
+USERS_VIEW = "users.view"
+USERS_CREATE_INTERNAL = "users.create_internal"
+USERS_CREATE_CUSTOMER = "users.create_customer"
+USERS_UPDATE = "users.update"
+USERS_ACTIVATE = "users.activate"
+USERS_DEACTIVATE = "users.deactivate"
+
+ROLES_VIEW = "roles.view"
+ROLES_CREATE = "roles.create"
+ROLES_UPDATE = "roles.update"
+ROLES_DELETE = "roles.delete"
+ROLES_ASSIGN = "roles.assign"
+
+PERMISSIONS_VIEW = "permissions.view"
+PERMISSIONS_CREATE = "permissions.create"
+PERMISSIONS_UPDATE = "permissions.update"
+PERMISSIONS_DELETE = "permissions.delete"
