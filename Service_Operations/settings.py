@@ -14,6 +14,7 @@ from pathlib import Path
 
 import os
 from dotenv import load_dotenv
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,12 +41,22 @@ DEBUG = os.getenv("DEBUG", "False").strip().lower() in ("1", "true", "yes")
 #     if host.strip()
 # ]
 
-if DEBUG:
-    ALLOWED_HOSTS = ["*"]
-else:
-    ALLOWED_HOSTS = [
-        "https://1011-110-226-115-234.ngrok-free.app/api/docs/",
-    ]
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    if host.strip()
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+render_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+if render_hostname:
+    ALLOWED_HOSTS.append(render_hostname)
+    CSRF_TRUSTED_ORIGINS.append(f"https://{render_hostname}")
 
 
 # Application definition
@@ -119,6 +130,7 @@ AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -157,16 +169,25 @@ WSGI_APPLICATION = 'Service_Operations.wsgi.application'
 #     }
 # }
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+if os.getenv("DATABASE_URL"):
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=os.getenv("DATABASE_URL"),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
@@ -204,6 +225,15 @@ USE_I18N = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -220,11 +250,18 @@ if not DEBUG:
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+if DEBUG:
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        },
+    }
+else:
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+        },
+    }
 
 
 SPECTACULAR_SETTINGS = {
@@ -336,4 +373,37 @@ SIMPLE_JWT = {
     "CHECK_USER_IS_ACTIVE": True,
 
     "UPDATE_LAST_LOGIN": True,
+}
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": (
+                "[{asctime}] {levelname} "
+                "{name}: {message}"
+            ),
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
 }

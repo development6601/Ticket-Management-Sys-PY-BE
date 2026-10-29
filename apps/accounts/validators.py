@@ -97,31 +97,53 @@ def normalize_phone_number(value, country=None):
         )
 
     value = value.strip()
-
     if not value:
         return ""
 
-    if not value.startswith("+"):
-        raise serializers.ValidationError(
-            "Phone number must include an international "
-            "country code, such as +91 or +1."
-        )
-
     try:
-        parsed_number = phonenumbers.parse(value, None)
+        if value.startswith("+"):
+            # International number: do not force
+            # the company's country code.
+            parsed_number = phonenumbers.parse(
+                value,
+                None
+            )
+        else:
+            # National number: use the supplied
+            # country to determine the dial code.
+            region = resolve_region_from_country(country)
+            if not region:
+                raise serializers.ValidationError(
+                    "Phone number must include an "
+                    "international country code, "
+                    "such as +91 or +1."
+                )
+
+            parsed_number = phonenumbers.parse(
+                value,
+                region
+            )
+            if not phonenumbers.is_valid_number_for_region(
+                parsed_number,
+                region
+            ):
+                raise serializers.ValidationError(
+                    "Enter a valid phone number "
+                    "for the selected country."
+                )
     except phonenumbers.NumberParseException:
         raise serializers.ValidationError(
-            "Enter a valid international phone number."
+            "Enter a valid phone number."
         )
 
     if not phonenumbers.is_valid_number(parsed_number):
         raise serializers.ValidationError(
-            "Enter a valid international phone number."
+            "Enter a valid phone number."
         )
 
     return phonenumbers.format_number(
         parsed_number,
-        phonenumbers.PhoneNumberFormat.E164,
+        phonenumbers.PhoneNumberFormat.E164
     )
 
 
@@ -130,17 +152,11 @@ def validate_phone_number(value, country=None):
 
 
 def validate_phone_for_country(value, country):
-    """
-    Validate an international phone number independently
-    of the company's registered country.
-    The country argument is retained for compatibility
-    with existing service calls.
-    """
     if not isinstance(value, str) or not value.strip():
         raise serializers.ValidationError(
             "Phone number is required."
         )
-    return normalize_phone_number(value)
+    return normalize_phone_number(value, country=country)
 
 
 class PhoneNumberField(serializers.CharField):
@@ -172,21 +188,6 @@ class PhoneNumberField(serializers.CharField):
         # 3. Customer model: use its own country.
         if hasattr(instance, "country"):
             return instance.country
-
-        # 4. User model: use associated customer company country.
-        from apps.accounts.models import User
-        from apps.customers.models import CustomerUser
-
-        if isinstance(instance, User):
-            membership = (
-                CustomerUser.objects
-                .select_related("customer")
-                .filter(user=instance)
-                .first()
-            )
-
-            if membership:
-                return membership.customer.country
 
         return None
 
