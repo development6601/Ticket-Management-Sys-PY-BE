@@ -25,6 +25,9 @@ class PermissionListSerializer(serializers.ModelSerializer):
 
 class CreatePermissionListSerializer(serializers.ListSerializer):
     def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError('At least one permission is required.')
+
         names = [
             item["name"].lower()
             for item in attrs
@@ -488,3 +491,177 @@ class RemoveRolePermissionResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     message = serializers.CharField()
     data = RemoveRolePermissionDataSerializer()
+
+class UserPermissionBulkSerializer(serializers.Serializer):
+    user_ids = extend_schema_field(
+        serializers.ListField(
+            child=serializers.UUIDField(),
+            help_text="One or more target user UUIDs.",
+        )
+    )(serializers.JSONField())
+    permission_ids = extend_schema_field(
+        serializers.ListField(
+            child=serializers.UUIDField(),
+            help_text="One or more permission UUIDs to assign or remove.",
+        )
+    )(serializers.JSONField())
+
+    def to_internal_value(self, data):
+        if not isinstance(data, Mapping):
+            raise serializers.ValidationError({
+                "non_field_errors": ["Invalid data. Expected a JSON object."]
+            })
+
+        allowed_fields = set(self.fields.keys())
+        unknown_fields = set(data.keys()) - allowed_fields
+
+        if unknown_fields:
+            raise serializers.ValidationError({
+                field: "This field is not allowed."
+                for field in sorted(unknown_fields)
+            })
+
+        data_copy = dict(data)
+        for field in ("user_ids", "permission_ids"):
+            if field in data_copy:
+                val = data_copy[field]
+                if isinstance(val, uuid.UUID):
+                    data_copy[field] = str(val)
+                elif isinstance(val, list):
+                    data_copy[field] = [
+                        str(item) if isinstance(item, uuid.UUID) else item
+                        for item in val
+                    ]
+
+        return super().to_internal_value(data_copy)
+
+    @staticmethod
+    def validate_ids(value, field_name):
+        if isinstance(value, (str, uuid.UUID)):
+            value = [value]
+
+        if not isinstance(value, list) or not value:
+            raise serializers.ValidationError(
+                f"{field_name} must be a UUID or "
+                "a non-empty list of UUIDs."
+            )
+
+        validated = []
+
+        for index, item in enumerate(value):
+            if isinstance(item, uuid.UUID):
+                validated.append(item)
+                continue
+
+            if not isinstance(item, str):
+                raise serializers.ValidationError(
+                    f"Invalid UUID at position {index}."
+                )
+
+            try:
+                validated.append(
+                    uuid.UUID(item)
+                )
+            except (ValueError, TypeError, AttributeError):
+                raise serializers.ValidationError(
+                    f"Invalid UUID at position {index}."
+                )
+
+        return list(dict.fromkeys(validated))
+
+    def validate_user_ids(self, value):
+        return self.validate_ids(value, "user_ids")
+
+    def validate_permission_ids(self, value):
+        return self.validate_ids(value, "permission_ids")
+
+
+class UserPermissionResultSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField()
+    user_email = serializers.EmailField()
+    permission_id = serializers.UUIDField()
+    permission_name = serializers.CharField()
+    permission_code = serializers.CharField()
+
+
+class UserPermissionSkippedSerializer(
+    UserPermissionResultSerializer
+):
+    reason = serializers.CharField()
+
+
+class AssignUserPermissionSummarySerializer(serializers.Serializer):
+    requested = serializers.IntegerField()
+    assigned = serializers.IntegerField()
+    already_assigned = serializers.IntegerField()
+
+
+class RemoveUserPermissionSummarySerializer(serializers.Serializer):
+    requested = serializers.IntegerField()
+    removed = serializers.IntegerField()
+    not_assigned = serializers.IntegerField()
+
+
+class AssignUserPermissionDataSerializer(serializers.Serializer):
+    summary = AssignUserPermissionSummarySerializer()
+    assigned = UserPermissionResultSerializer(many=True)
+    already_assigned = UserPermissionSkippedSerializer(many=True)
+
+
+class RemoveUserPermissionDataSerializer(serializers.Serializer):
+    summary = RemoveUserPermissionSummarySerializer()
+    removed = UserPermissionResultSerializer(many=True)
+    not_assigned = UserPermissionSkippedSerializer(many=True)
+
+
+class AssignUserPermissionResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = AssignUserPermissionDataSerializer()
+
+
+class RemoveUserPermissionResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = RemoveUserPermissionDataSerializer()
+
+
+class UserPermissionUserSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    email = serializers.EmailField()
+    account_status = serializers.CharField()
+    is_active = serializers.BooleanField()
+    is_primary_contact = serializers.BooleanField()
+
+
+class UserPermissionDetailDataSerializer(serializers.Serializer):
+    user = UserPermissionUserSerializer()
+    role_permissions = serializers.ListField(
+        child=serializers.CharField()
+    )
+    direct_permissions = serializers.ListField(
+        child=serializers.CharField()
+    )
+    effective_permissions = serializers.ListField(
+        child=serializers.CharField()
+    )
+    access_enabled = serializers.BooleanField()
+
+
+class UserPermissionPaginatedDataSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = UserPermissionDetailDataSerializer(many=True)
+
+
+class UserPermissionListResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = UserPermissionPaginatedDataSerializer()
+
+
+class UserPermissionDetailResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = UserPermissionDetailDataSerializer()

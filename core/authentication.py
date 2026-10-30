@@ -15,7 +15,7 @@ class CompanyAwareJWTAuthentication(JWTAuthentication):
             or user.account_status != User.AccountStatus.ACTIVE
         ):
             raise AuthenticationFailed(
-                "This user account is not active."
+                "Your account has been deactivated. Please contact your system administrator."
             )
 
         inactive_company_exists = (
@@ -31,7 +31,7 @@ class CompanyAwareJWTAuthentication(JWTAuthentication):
 
         if inactive_company_exists:
             raise AuthenticationFailed(
-                "Your customer company is not active."
+                "Your customer company is not active. Please contact your administrator."
             )
 
         return user

@@ -230,6 +230,32 @@ class RolePermission(BaseModel):
         return f"{self.role.name} - {self.permission.name}"
 
 
+class UserPermission(BaseModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="direct_permissions",
+    )
+
+    permission = models.ForeignKey(
+        Permission,
+        on_delete=models.PROTECT,
+        related_name="user_permissions",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "permission"],
+                name="unique_user_permission",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.permission.name}"
+        
+
+
 class PasswordResetRequest(BaseModel):
 
     class Purpose(models.TextChoices):

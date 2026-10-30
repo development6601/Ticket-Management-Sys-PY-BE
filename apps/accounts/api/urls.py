@@ -4,7 +4,7 @@ from apps.accounts.api.views.auth import *
 from apps.accounts.api.views.users import *
 from apps.accounts.api.views.roles import *
 from apps.accounts.api.views.permissions import *
-
+from apps.accounts.api.views.user_permissions import *
 
 urlpatterns = [
     path("auth/register/", RegisterView.as_view(), name="auth-register"),
@@ -38,4 +38,9 @@ urlpatterns = [
     path("permissions/<uuid:id>/", PermissionDetailView.as_view(), name="permission-detail"),
 
     path("users/<uuid:id>/role/", UserRoleView.as_view(), name="user-role"),
+
+    path("user-permissions/", UserPermissionListView.as_view(), name="user-permission-list"),
+    path("user-permissions/assign/", UserPermissionAssignView.as_view(), name="user-permission-assign"),
+    path("user-permissions/remove/", UserPermissionRemoveView.as_view(), name="user-permission-remove"),
+
 ]

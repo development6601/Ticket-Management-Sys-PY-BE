@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.db import transaction, IntegrityError
 from django.db.models.deletion import ProtectedError
 from rest_framework.exceptions import ValidationError
@@ -11,8 +12,9 @@ class PermissionService:
     def create_permission(*, validated_data):
         try : 
             if isinstance(validated_data, list):
+                now = timezone.now()
                 permissions = [
-                    Permission(**data)
+                    Permission(**data, created_at=now, updated_at=now)
                     for data in validated_data
                 ]
 
@@ -51,7 +53,7 @@ class PermissionService:
             )
         except IntegrityError:
             raise ValidationError(
-                "A permission with the same module and action already exists."
+                "A permission with the same name or module and action already exists."
             )
 
         return permission
@@ -96,7 +98,7 @@ class PermissionService:
 
         except ProtectedError:
             raise ValidationError(
-                "One or more permissions cannot be deleted because they are assigned to roles."
+                "One or more permissions cannot be deleted because they are assigned to roles or users."
             )
 
         return deleted_ids

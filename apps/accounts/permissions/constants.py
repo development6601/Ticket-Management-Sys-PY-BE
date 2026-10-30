@@ -15,3 +15,6 @@ PERMISSIONS_VIEW = "permissions.view"
 PERMISSIONS_CREATE = "permissions.create"
 PERMISSIONS_UPDATE = "permissions.update"
 PERMISSIONS_DELETE = "permissions.delete"
+
+USER_PERMISSIONS_VIEW = "user_permissions.view"
+USER_PERMISSIONS_MANAGE = "user_permissions.manage"
