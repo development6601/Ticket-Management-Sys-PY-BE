@@ -34,7 +34,7 @@ class RoleListResponseSerializer(serializers.Serializer):
     data = RoleListDataSerializer()
 
 
-ROLE_CODE_REGEX = re.compile(r"^[A-Z]+$")
+ROLE_CODE_REGEX = re.compile(r"^[A-Z]+(?:_[A-Z]+)*$")
 
 class CreateRoleListSerializer(serializers.ListSerializer):
     def validate(self, attrs):
@@ -99,7 +99,7 @@ class CreateRoleSerializer(serializers.ModelSerializer):
         code = value.strip()
         if not ROLE_CODE_REGEX.match(code):
             raise serializers.ValidationError(
-                "Role code must be a single word in ALL CAPS (letters A-Z only)."
+                "Role code must contain only uppercase letters (A-Z) and single underscores between words (e.g. 'ADMIN' or 'TECH_SUPPORT')."
             )
         if Role.objects.filter(code__iexact=code).exists():
             raise serializers.ValidationError(
@@ -112,6 +112,12 @@ class CreateRoleSerializer(serializers.ModelSerializer):
 
 
 class CreateRoleResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = RoleListSerializer()
+
+
+class CreateRoleBulkResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     message = serializers.CharField()
     data = RoleListSerializer(many=True)
@@ -235,10 +241,10 @@ class DeleteRoleSerializer(serializers.Serializer):
 
         for index, role_id in enumerate(ids):
             try:
-                validated_ids.append(uuid.UUID(str(role_id)))
+                validated_ids.append(uuid.UUID(str(role_id).strip()))
             except (ValueError, AttributeError, TypeError):
                 raise serializers.ValidationError(
-                    f"Invalid role ID at position {index}: {role_id}"
+                    f"Invalid UUID format at position {index} for role ID."
                 )
 
         attrs["ids"] = list(dict.fromkeys(validated_ids))

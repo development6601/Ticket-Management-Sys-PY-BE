@@ -662,10 +662,33 @@ class UserRoleView(APIView):
     ]
 
     def get_permissions(self):
+        if self.request.method in ("OPTIONS", "HEAD"):
+            return [IsAuthenticated()]
+
         if self.request.method == "PATCH":
             self.required_permission = ROLES_ASSIGN
 
         return super().get_permissions()
+
+    def http_method_not_allowed(self, request, *args, **kwargs):
+        if request.method == "GET":
+            message = (
+                "Method 'GET' is not allowed on this endpoint. "
+                "Use PATCH to update a user's role, or GET /api/v1/users/<id>/ to view user details."
+            )
+        else:
+            allowed = [m.upper() for m in self.allowed_methods if m.upper() not in ("OPTIONS", "HEAD")]
+            message = f"Method '{request.method}' not allowed on this endpoint. Supported methods: {', '.join(allowed)}."
+
+        return Response(
+            {
+                "success": False,
+                "message": message,
+                "data": None,
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            headers={"Allow": ", ".join(self.allowed_methods)},
+        )
 
     @extend_schema(
         tags=["Users"],

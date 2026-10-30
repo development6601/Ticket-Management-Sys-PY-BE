@@ -161,6 +161,19 @@ class RoleService:
                 ]
             })
 
+        # Prevent modifying permissions of system roles
+        system_roles = [
+            role.code or role.name
+            for role in roles
+            if role.is_system_role
+        ]
+        if system_roles:
+            raise ValidationError({
+                "role_ids": [
+                    f"Cannot modify permissions of system roles: {', '.join(system_roles)}."
+                ]
+            })
+
         permissions = Permission.objects.filter(
             id__in=permission_ids
         )
@@ -235,7 +248,7 @@ class RoleService:
                     assigned.append(result)
 
         if new_assignments:
-            RolePermission.objects.bulk_create(new_assignments)
+            RolePermission.objects.bulk_create(new_assignments, ignore_conflicts=True)
 
         requested_count = len(roles) * len(permissions)
 
@@ -273,6 +286,19 @@ class RoleService:
                 "role_ids": [
                     f"Role does not exist: {role_id}"
                     for role_id in missing_role_ids
+                ]
+            })
+
+        # Prevent modifying permissions of system roles
+        system_roles = [
+            role.code or role.name
+            for role in roles
+            if role.is_system_role
+        ]
+        if system_roles:
+            raise ValidationError({
+                "role_ids": [
+                    f"Cannot modify permissions of system roles: {', '.join(system_roles)}."
                 ]
             })
 

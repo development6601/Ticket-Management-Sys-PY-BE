@@ -215,20 +215,23 @@ class DeletePermissionSerializer(serializers.Serializer):
                 for field in sorted(unknown_fields)
             })
 
+        if "ids" in data:
+            if isinstance(data["ids"], uuid.UUID):
+                data = dict(data)
+                data["ids"] = str(data["ids"])
+            elif isinstance(data["ids"], list):
+                data = dict(data)
+                data["ids"] = [str(x) if isinstance(x, uuid.UUID) else x for x in data["ids"]]
+
         return super().to_internal_value(data)
 
     def validate_ids(self, value):
-        if isinstance(value, str):
+        if isinstance(value, (str, uuid.UUID)):
             value = [value]
 
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not value:
             raise serializers.ValidationError(
-                "ids must be a UUID or a list of UUIDs."
-            )
-
-        if not value:
-            raise serializers.ValidationError(
-                "At least one permission ID is required."
+                "ids must be a UUID or a non-empty list of UUIDs."
             )
 
         validated_ids = []
@@ -236,11 +239,11 @@ class DeletePermissionSerializer(serializers.Serializer):
         for index, permission_id in enumerate(value):
             try: 
                 validated_ids.append(
-                    str(uuid.UUID(str(permission_id)))
+                    str(uuid.UUID(str(permission_id).strip()))
                 )
             except (ValueError, AttributeError, TypeError):
                 raise serializers.ValidationError(
-                    f"Invalid permission ID at position {index}: {permission_id}"
+                    f"Invalid UUID format at position {index} for permission ID."
                 )
 
         #duplicate
@@ -313,64 +316,60 @@ class AssignPermissionToRoleSerializer(serializers.Serializer):
                 for field in sorted(unknown_fields)
             })
 
+        data_copy = dict(data)
+        changed = False
+        for f in ("role_ids", "permission_ids"):
+            if f in data_copy:
+                if isinstance(data_copy[f], uuid.UUID):
+                    data_copy[f] = str(data_copy[f])
+                    changed = True
+                elif isinstance(data_copy[f], list):
+                    data_copy[f] = [str(x) if isinstance(x, uuid.UUID) else x for x in data_copy[f]]
+                    changed = True
+        if changed:
+            data = data_copy
+
         return super().to_internal_value(data)
 
     def validate_role_ids(self, value):
-        if isinstance(value, str):
+        if isinstance(value, (str, uuid.UUID)):
             value = [value]
 
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not value:
             raise serializers.ValidationError(
-                "role_ids must be a UUID or a list of UUIDs."
+                "role_ids must be a UUID or a non-empty list of UUIDs."
             )
 
-        if not value:
-            raise serializers.ValidationError(
-                "At least one role is required."
-            )
+        validated = []
+        for index, role_id in enumerate(value):
+            try:
+                validated.append(str(uuid.UUID(str(role_id).strip())))
+            except (ValueError, AttributeError, TypeError):
+                raise serializers.ValidationError(
+                    f"Invalid UUID format at position {index} for role ID."
+                )
 
-        try : 
-            value = [
-                str(uuid.UUID(str(role_id)))
-                for role_id in value
-            ]
-        except (ValueError, AttributeError, TypeError):
-            raise serializers.ValidationError(
-                "There are one or more invalid role IDs."
-            )
-
-        #remove duplicate role ids
-        return list(dict.fromkeys(value))
-
+        return list(dict.fromkeys(validated))
 
     def validate_permission_ids(self, value):
-        # Support single UUID
-        if isinstance(value, str):
+        if isinstance(value, (str, uuid.UUID)):
             value = [value]
 
-        # Must be a list after conversion
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not value:
             raise serializers.ValidationError(
-                "permission_ids must be a UUID or a list of UUIDs."
+                "permission_ids must be a UUID or a non-empty list of UUIDs."
             )
 
-        if not value:
-            raise serializers.ValidationError(
-                "At least one permission is required."
-            )
+        validated = []
+        for index, permission_id in enumerate(value):
+            try:
+                validated.append(str(uuid.UUID(str(permission_id).strip())))
+            except (ValueError, AttributeError, TypeError):
+                raise serializers.ValidationError(
+                    f"Invalid UUID format at position {index} for permission ID."
+                )
 
-        try:
-            value = [
-                str(uuid.UUID(str(permission_id)))
-                for permission_id in value
-            ]
-        except (ValueError, AttributeError, TypeError):
-            raise serializers.ValidationError(
-                "One or more permission IDs are invalid."
-            )
-
-        # Remove duplicate IDs from request itself
-        return list(dict.fromkeys(value))
+        return list(dict.fromkeys(validated))
 
 class RolePermissionResultSerializer(serializers.Serializer):
     role_id = serializers.UUIDField()
@@ -421,56 +420,57 @@ class RemovePermissionFromRoleSerializer(serializers.Serializer):
                 for field in sorted(unknown_fields)
             })
 
+        data_copy = dict(data)
+        changed = False
+        for f in ("role_ids", "permission_ids"):
+            if f in data_copy:
+                if isinstance(data_copy[f], uuid.UUID):
+                    data_copy[f] = str(data_copy[f])
+                    changed = True
+                elif isinstance(data_copy[f], list):
+                    data_copy[f] = [str(x) if isinstance(x, uuid.UUID) else x for x in data_copy[f]]
+                    changed = True
+        if changed:
+            data = data_copy
+
         return super().to_internal_value(data)
 
     def validate_role_ids(self, value):
-        if isinstance(value, str):
+        if isinstance(value, (str, uuid.UUID)):
             value = [value]
 
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not value:
             raise serializers.ValidationError(
-                "role_ids must be a UUID or a list of UUIDs."
-            )
-
-        if not value:
-            raise serializers.ValidationError(
-                "At least one role is required."
+                "role_ids must be a UUID or a non-empty list of UUIDs."
             )
 
         validated_ids = []
-
         for index, role_id in enumerate(value):
             try:
-                validated_ids.append(str(uuid.UUID(str(role_id))))
+                validated_ids.append(str(uuid.UUID(str(role_id).strip())))
             except (ValueError, AttributeError, TypeError):
                 raise serializers.ValidationError(
-                    f"Invalid role ID at position {index}: {role_id}"
+                    f"Invalid UUID format at position {index} for role ID."
                 )
 
         return list(dict.fromkeys(validated_ids))
 
     def validate_permission_ids(self, value):
-        if isinstance(value, str):
+        if isinstance(value, (str, uuid.UUID)):
             value = [value]
 
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not value:
             raise serializers.ValidationError(
-                "permission_ids must be a UUID or a list of UUIDs."
-            )
-
-        if not value:
-            raise serializers.ValidationError(
-                "At least one permission is required."
+                "permission_ids must be a UUID or a non-empty list of UUIDs."
             )
 
         validated_ids = []
-
         for index, permission_id in enumerate(value):
             try:
-                validated_ids.append(str(uuid.UUID(str(permission_id))))
+                validated_ids.append(str(uuid.UUID(str(permission_id).strip())))
             except (ValueError, AttributeError, TypeError):
                 raise serializers.ValidationError(
-                    f"Invalid permission ID at position {index}: {permission_id}"
+                    f"Invalid UUID format at position {index} for permission ID."
                 )
 
         return list(dict.fromkeys(validated_ids))
@@ -553,18 +553,13 @@ class UserPermissionBulkSerializer(serializers.Serializer):
                 validated.append(item)
                 continue
 
-            if not isinstance(item, str):
-                raise serializers.ValidationError(
-                    f"Invalid UUID at position {index}."
-                )
-
             try:
                 validated.append(
-                    uuid.UUID(item)
+                    uuid.UUID(str(item).strip())
                 )
             except (ValueError, TypeError, AttributeError):
                 raise serializers.ValidationError(
-                    f"Invalid UUID at position {index}."
+                    f"Invalid UUID format at position {index} for {field_name}."
                 )
 
         return list(dict.fromkeys(validated))
@@ -665,3 +660,45 @@ class UserPermissionDetailResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     message = serializers.CharField()
     data = UserPermissionDetailDataSerializer()
+
+
+class RolePermissionItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    module = serializers.CharField()
+    action = serializers.CharField()
+    description = serializers.CharField(allow_null=True)
+
+
+class RolePermissionRoleSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    code = serializers.CharField()
+    description = serializers.CharField(allow_null=True)
+    is_system_role = serializers.BooleanField()
+    is_assignable = serializers.BooleanField()
+
+
+class RolePermissionDetailDataSerializer(serializers.Serializer):
+    role = RolePermissionRoleSerializer()
+    permissions_count = serializers.IntegerField()
+    permissions = RolePermissionItemSerializer(many=True)
+
+
+class RolePermissionDetailResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = RolePermissionDetailDataSerializer()
+
+
+class RolePermissionPaginatedDataSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = RolePermissionDetailDataSerializer(many=True)
+
+
+class RolePermissionListResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = RolePermissionPaginatedDataSerializer()

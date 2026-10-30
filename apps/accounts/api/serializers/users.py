@@ -16,8 +16,7 @@ from apps.accounts.validators import (
 
 from apps.accounts.permissions.constants import *
 from apps.accounts.permissions.rbac import (
-    primary_has_customer_permission,
-    role_has_permission,
+    user_has_effective_permission,
 )
 from drf_spectacular.utils import extend_schema_field
 
@@ -1003,14 +1002,8 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
 
     def _has_permission(self, user, permission_name):
-        user_role = (
-            UserRole.objects
-            .select_related("role")
-            .filter(user=user)
-            .first()
-        )
-        return role_has_permission(
-            user_role.role if user_role else None,
+        return user_has_effective_permission(
+            user,
             permission_name,
         )
 
@@ -1092,9 +1085,9 @@ class CreateUserSerializer(serializers.ModelSerializer):
                     "customer": "Your company is inactive or unavailable."
                 })
 
-            if not (
-                customer_user.is_primary_contact
-                and primary_has_customer_permission(USERS_CREATE_CUSTOMER)
+            if not user_has_effective_permission(
+                user,
+                USERS_CREATE_CUSTOMER,
             ):
                 raise PermissionDenied(
                     "You do not have permission to create customer users."

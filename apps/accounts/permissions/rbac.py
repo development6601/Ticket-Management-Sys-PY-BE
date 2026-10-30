@@ -183,8 +183,17 @@ class HasPermission(BasePermission):
     required_permission = None
 
     def has_permission(self, request, view):
+        if request.method in ("OPTIONS", "HEAD"):
+            return True
+
         if not request.user or not request.user.is_authenticated:
             return False
+
+        # If the requested method is not implemented on the view, allow the request
+        # through so that DRF can dispatch to http_method_not_allowed (returning HTTP 405)
+        handler = getattr(view, request.method.lower(), None)
+        if handler is None:
+            return True
 
         if (
             not request.user.is_active

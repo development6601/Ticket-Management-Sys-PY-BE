@@ -1,4 +1,4 @@
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, OpenApiRequest
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, OpenApiRequest, PolymorphicProxySerializer
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -26,6 +26,9 @@ class RoleListView(APIView):
     ]
 
     def get_permissions(self):
+        if self.request.method in ("OPTIONS", "HEAD"):
+            return [IsAuthenticated()]
+
         if self.request.method == "GET":
             self.required_permission = ROLES_VIEW
         elif self.request.method == "POST":
@@ -34,6 +37,18 @@ class RoleListView(APIView):
             self.required_permission = ROLES_DELETE
 
         return super().get_permissions()
+
+    def http_method_not_allowed(self, request, *args, **kwargs):
+        allowed = [m.upper() for m in self.allowed_methods if m.upper() not in ("OPTIONS", "HEAD")]
+        return Response(
+            {
+                "success": False,
+                "message": f"Method '{request.method}' not allowed on this endpoint. Supported methods: {', '.join(allowed)}.",
+                "data": None,
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            headers={"Allow": ", ".join(self.allowed_methods)},
+        )
 
     @extend_schema(
         operation_id="roles_list",
@@ -178,7 +193,16 @@ class RoleListView(APIView):
     @extend_schema(
         tags=["Roles"],
         request=CreateRoleSerializer,
-        responses={201: CreateRoleResponseSerializer},
+        responses={
+            201: PolymorphicProxySerializer(
+                component_name="CreateRoleResult",
+                serializers=[
+                    CreateRoleResponseSerializer,
+                    CreateRoleBulkResponseSerializer,
+                ],
+                resource_type_field_name=None,
+            )
+        },
         summary="Create Role",
         description=(
             "Create one role or multiple roles in the same request."
@@ -207,8 +231,7 @@ class RoleListView(APIView):
             message = "Roles created successfully."
         else:
             data = RoleListSerializer(
-                [roles],
-                many=True,
+                roles,
             ).data
             message = "Role created successfully."
 
@@ -261,12 +284,35 @@ class RoleDetailView(APIView):
     ]
 
     def get_permissions(self):
+        if self.request.method in ("OPTIONS", "HEAD"):
+            return [IsAuthenticated()]
+
         if self.request.method == "GET":
             self.required_permission = ROLES_VIEW
         elif self.request.method == "PATCH":
             self.required_permission = ROLES_UPDATE
 
         return super().get_permissions()
+
+    def http_method_not_allowed(self, request, *args, **kwargs):
+        if request.method == "DELETE":
+            message = (
+                "Method 'DELETE' is not allowed on role detail endpoint. "
+                "To delete roles, please use DELETE /api/v1/roles/ with the role IDs in the request body."
+            )
+        else:
+            allowed = [m.upper() for m in self.allowed_methods if m.upper() not in ("OPTIONS", "HEAD")]
+            message = f"Method '{request.method}' not allowed on this endpoint. Supported methods: {', '.join(allowed)}."
+
+        return Response(
+            {
+                "success": False,
+                "message": message,
+                "data": None,
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            headers={"Allow": ", ".join(self.allowed_methods)},
+        )
 
     @extend_schema(
         operation_id="roles_retrieve",

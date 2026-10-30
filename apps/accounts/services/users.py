@@ -18,6 +18,7 @@ from apps.accounts.permissions.constants import (
 from apps.accounts.permissions.rbac import (
     primary_has_customer_permission,
     role_has_permission,
+    user_has_effective_permission,
 )
 from django.db.models import Q
 
@@ -282,14 +283,8 @@ class UserService:
             )
 
         def has_permission(permission_name):
-            actor_user_role = (
-                UserRole.objects
-                .select_related("role")
-                .filter(user=actor)
-                .first()
-            )
-            return role_has_permission(
-                actor_user_role.role if actor_user_role else None,
+            return user_has_effective_permission(
+                actor,
                 permission_name,
             )
 
@@ -302,10 +297,7 @@ class UserService:
                     "Customer users cannot create internal users."
                 )
 
-            if not (
-                membership.is_primary_contact
-                and primary_has_customer_permission(USERS_CREATE_CUSTOMER)
-            ):
+            if not has_permission(USERS_CREATE_CUSTOMER):
                 raise PermissionDenied(
                     "You do not have permission to create customer users."
                 )
@@ -564,22 +556,10 @@ class UserService:
 
         # A non-admin must have the specific status permission.
         if not is_admin:
-            if actor_customer is not None:
-                has_status_perm = (
-                    actor_customer.is_primary_contact
-                    and primary_has_customer_permission(required_permission)
-                )
-            else:
-                actor_user_role = (
-                    UserRole.objects
-                    .select_related("role")
-                    .filter(user=performed_by)
-                    .first()
-                )
-                has_status_perm = role_has_permission(
-                    actor_user_role.role if actor_user_role else None,
-                    required_permission,
-                )
+            has_status_perm = user_has_effective_permission(
+                performed_by,
+                required_permission,
+            )
 
             if not has_status_perm:
                 raise PermissionDenied(
@@ -804,14 +784,8 @@ class UserService:
         )
 
         if not actor_is_admin:
-            actor_user_role = (
-                UserRole.objects
-                .select_related("role")
-                .filter(user=performed_by)
-                .first()
-            )
-            has_assign_perm = role_has_permission(
-                actor_user_role.role if actor_user_role else None,
+            has_assign_perm = user_has_effective_permission(
+                performed_by,
                 ROLES_ASSIGN,
             )
             if not has_assign_perm:

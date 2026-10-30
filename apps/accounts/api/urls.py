@@ -31,6 +31,7 @@ urlpatterns = [
     path("roles/", RoleListView.as_view(), name="role-list"),
     path("roles/<uuid:id>/", RoleDetailView.as_view(), name="role-detail"),
 
+    path("role-permissions/", RolePermissionListView.as_view(), name="role-permission-list"),
     path("role-permissions/assign/", RolePermissionCreateView.as_view(), name="role-permission-assign"),
     path("role-permissions/remove/", RolePermissionRemoveView.as_view(), name="role-permission-remove"),
 
