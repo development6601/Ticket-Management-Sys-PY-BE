@@ -32,6 +32,10 @@ def validate_role_name(value):
     return validate_person_name(value, field_name="Role name", allow_blank=False)
 
 
+def validate_category_name(value):
+    return validate_person_name(value, field_name="Category name", allow_blank=False)
+
+
 PERMISSION_NAME_REGEX = re.compile(r"^[a-zA-Z\u00C0-\u017F\s\._-]+$")
 IDENTIFIER_NAME_REGEX = re.compile(r"^[a-zA-Z\u00C0-\u017F_-]+$")
 

@@ -323,6 +323,10 @@ SPECTACULAR_SETTINGS = {
             "description": "Ticket management.",
         },
         {
+            "name": "Ticket Categories",
+            "description": "Ticket category management.",
+        },
+        {
             "name": "Ticket Workflow",
             "description": "Ticket status and workflow operations.",
         },

@@ -7,14 +7,30 @@ from apps.accounts.models import BaseModel
 from apps.customers.models import Customer 
 from apps.support.models import SupportTeam
 
+from django.db.models.functions import Lower
+import re 
 
 class TicketCategory(BaseModel):
     name = models.CharField(
         max_length=100,
-        unique=True
+        # unique=True
     )                
     description = models.TextField(blank = True)
     is_active = models.BooleanField(default=True)
+
+    class Meta: 
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                name="unique_ticket_category",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.name is not None:
+            self.name = re.sub(r"\s+", " ", self.name).strip()
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

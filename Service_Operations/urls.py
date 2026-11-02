@@ -46,4 +46,10 @@ urlpatterns = [
         "api/v1/",
         include("apps.customers.api.urls"),
     ),
+
+    # Tickets
+    path(
+        "api/v1/",
+        include("apps.tickets.api.urls"),
+    ),
 ]

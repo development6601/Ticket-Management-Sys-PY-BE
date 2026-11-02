@@ -159,6 +159,7 @@ def get_user_permission_manager(user, required_permission=None):
             or user_has_effective_permission(user, PERMISSIONS_VIEW)
             or user_has_effective_permission(user, USERS_VIEW)
             or user_has_effective_permission(user, USER_PERMISSIONS_VIEW)
+            or user_has_effective_permission(user, TICKET_CATEGORY_MANAGE)
         ):
             return "internal", None
 
