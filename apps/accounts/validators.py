@@ -33,7 +33,24 @@ def validate_role_name(value):
 
 
 def validate_category_name(value):
-    return validate_person_name(value, field_name="Category name", allow_blank=False)
+    if not isinstance(value, str):
+        raise serializers.ValidationError("Category name must be a string.")
+
+    name = re.sub(r"\s+", " ", value).strip()
+    if not name:
+        raise serializers.ValidationError("Category name cannot be empty.")
+
+    if not any(char.isalnum() for char in name):
+        raise serializers.ValidationError(
+            "Category name must contain at least one letter or number."
+        )
+
+    if name.isdigit() or not any(char.isalpha() for char in name):
+        raise serializers.ValidationError(
+            "Category name must contain at least one letter and cannot be only numbers."
+        )
+
+    return name
 
 
 PERMISSION_NAME_REGEX = re.compile(r"^[a-zA-Z\u00C0-\u017F\s\._-]+$")

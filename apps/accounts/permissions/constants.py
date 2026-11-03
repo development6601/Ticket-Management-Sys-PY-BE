@@ -20,6 +20,7 @@ USER_PERMISSIONS_VIEW = "user_permissions.view"
 USER_PERMISSIONS_MANAGE = "user_permissions.manage"
 
 TICKET_CATEGORY_VIEW = "ticket_category.view"
+TICKET_CATEGORY_CREATE = "ticket_category.create"
 TICKET_CATEGORY_MANAGE = "ticket_category.manage"
 
 TICKETS_VIEW = "tickets.view"

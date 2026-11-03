@@ -15,8 +15,55 @@ from apps.accounts.models import (
     PasswordResetRequest,
 )
 from apps.accounts.services.authentication import AuthenticationService
-from apps.customers.models import Customer, CustomerUser
+from apps.customers.models import Customer, CustomerUser, normalize_company_name
 from apps.notifications.models import EmailJob
+from apps.tickets.services.categories import seed_customer_categories
+
+
+class CustomerCreationService:
+
+    @staticmethod
+    @transaction.atomic
+    def create_customer(
+        *,
+        company_name,
+        contact_person,
+        email,
+        phone,
+        address,
+        state,
+        country,
+        primary_user=None,
+        is_active=False,
+        account_status=Customer.AccountStatus.PENDING_VERIFICATION,
+        account_manager=None,
+        notes="",
+    ):
+        customer = Customer.objects.create(
+            company_name=normalize_company_name(company_name),
+            contact_person=contact_person,
+            email=email,
+            phone=phone,
+            address=address,
+            state=state,
+            country=country,
+            is_active=is_active,
+            account_status=account_status,
+            account_manager=account_manager,
+            notes=notes,
+        )
+
+        if primary_user is not None:
+            CustomerUser.objects.create(
+                customer=customer,
+                user=primary_user,
+                is_primary_contact=True,
+                role=CustomerUser.Role.ADMIN,
+            )
+
+        seed_customer_categories(customer)
+
+        return customer
 
 
 class CustomerStatusService:

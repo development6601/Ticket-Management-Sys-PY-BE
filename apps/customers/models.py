@@ -153,6 +153,10 @@ class Customer(BaseModel):
         return self.company_name
 
 class CustomerUser(BaseModel):
+    class Role(models.TextChoices):
+        ADMIN = "ADMIN", "Admin"
+        MEMBER = "MEMBER", "Member"
+
     customer = models.ForeignKey(
         Customer,
         on_delete=models.PROTECT,
@@ -168,6 +172,20 @@ class CustomerUser(BaseModel):
     is_primary_contact = models.BooleanField(
         default=False,
     )
+
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.MEMBER,
+    )
+
+    def save(self, *args, **kwargs):
+        if self.is_primary_contact:
+            self.role = self.Role.ADMIN
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None and "role" not in update_fields:
+                kwargs["update_fields"] = [*update_fields, "role"]
+        super().save(*args, **kwargs)
 
     class Meta:
         constraints = [

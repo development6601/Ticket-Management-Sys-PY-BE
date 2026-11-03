@@ -397,11 +397,22 @@ class UserService:
                         "customer_id": "Cannot add users to an inactive customer company."
                     })
 
+                CustomerUser.objects.create(
+                    customer=customer,
+                    user=user,
+                    is_primary_contact=False,
+                    role=CustomerUser.Role.MEMBER,
+                )
+
             elif customer_data:
+                from apps.customers.services.customers import (
+                    CustomerCreationService,
+                )
+
                 company_name = normalize_company_name(customer_data["company_name"])
 
                 with transaction.atomic():
-                    customer = Customer.objects.create(
+                    customer = CustomerCreationService.create_customer(
                         company_name=company_name,
                         contact_person=customer_data["contact_person"],
                         email=user.email,
@@ -409,17 +420,12 @@ class UserService:
                         address=customer_data["address"].strip(),
                         state=customer_data["state"].strip(),
                         country=customer_data["country"].strip(),
+                        primary_user=user,
                         is_active=False,
                         account_status=Customer.AccountStatus.PENDING_VERIFICATION,
                         account_manager=None,
                         notes="",
                     )
-
-            CustomerUser.objects.create(
-                customer=customer,
-                user=user,
-                is_primary_contact=(customer_data is not None),
-            )
 
             raw_token = AuthenticationService.send_password_setup_email(
                 user=user,

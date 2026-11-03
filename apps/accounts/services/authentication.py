@@ -264,28 +264,24 @@ class AuthenticationService:
         user.set_password(password)
         user.save()
 
-        #3.create the customer company
+        #3.create the customer company and link the first user
+        from apps.customers.services.customers import CustomerCreationService
+
         with transaction.atomic():
-            customer = Customer.objects.create(
-                company_name=normalize_company_name(customer),
+            customer = CustomerCreationService.create_customer(
+                company_name=customer,
                 contact_person=contact_person,
                 email=user.email,
                 phone=phone,
                 address=address,
                 state=state,
                 country=country,
+                primary_user=user,
                 is_active=False,
                 account_status=Customer.AccountStatus.PENDING_VERIFICATION,
                 account_manager=None,
                 notes="",
             )
-
-        #4. Link the first user to the customer 
-        CustomerUser.objects.create(
-            customer=customer,
-            user=user,
-            is_primary_contact=True,
-        )
 
         #5. Assign Customer Role
         UserRole.objects.create(

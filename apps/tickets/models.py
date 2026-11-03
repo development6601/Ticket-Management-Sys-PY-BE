@@ -10,27 +10,172 @@ from apps.support.models import SupportTeam
 from django.db.models.functions import Lower
 import re 
 
+
+class TicketCategoryQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        if "name" in kwargs:
+            raw_name = kwargs["name"]
+            if raw_name is None or not isinstance(raw_name, str):
+                raise ValidationError({
+                    "name": "Category name must be a string."
+                })
+            normalized_name = re.sub(r"\s+", " ", raw_name).strip()
+            if not normalized_name:
+                raise ValidationError({
+                    "name": "Category name cannot be empty."
+                })
+            if len(normalized_name) > 100:
+                raise ValidationError({
+                    "name": (
+                        "Ensure this value has at most 100 characters."
+                    )
+                })
+            if not any(char.isalnum() for char in normalized_name):
+                raise ValidationError({
+                    "name": (
+                        "Category name must contain a letter or number."
+                    )
+                })
+            if normalized_name.isdigit() or not any(
+                char.isalpha() for char in normalized_name
+            ):
+                raise ValidationError({
+                    "name": (
+                        "Category name must contain at least one letter "
+                        "and cannot be only numbers."
+                    )
+                })
+            kwargs["name"] = normalized_name
+
+        if "description" in kwargs:
+            raw_description = kwargs["description"]
+            if raw_description is None:
+                kwargs["description"] = ""
+            elif not isinstance(raw_description, str):
+                raise ValidationError({
+                    "description": "Description must be a string."
+                })
+            else:
+                normalized_description = re.sub(
+                    r"\s+", " ", raw_description
+                ).strip()
+                if len(normalized_description) > 2000:
+                    raise ValidationError({
+                        "description": (
+                            "Ensure this value has at most 2000 characters."
+                        )
+                    })
+                if normalized_description and (
+                    normalized_description.isdigit()
+                    or not any(
+                        char.isalpha() for char in normalized_description
+                    )
+                ):
+                    raise ValidationError({
+                        "description": (
+                            "Description must contain at least one letter "
+                            "and cannot be only numbers."
+                        )
+                    })
+                kwargs["description"] = normalized_description
+
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, *args, **kwargs):
+        for obj in objs:
+            obj.clean()
+        return super().bulk_create(objs, *args, **kwargs)
+
+
 class TicketCategory(BaseModel):
-    name = models.CharField(
-        max_length=100,
-        # unique=True
-    )                
-    description = models.TextField(blank = True)
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="ticket_categories",
+    )
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
-    class Meta: 
+    position = models.PositiveIntegerField(default=0)
+
+    objects = TicketCategoryQuerySet.as_manager()
+
+    class Meta:
         constraints = [
             models.UniqueConstraint(
+                "customer",
                 Lower("name"),
-                name="unique_ticket_category",
+                name="unique_customer_ticket_category",
             ),
         ]
 
-    def save(self, *args, **kwargs):
-        if self.name is not None:
-            self.name = re.sub(r"\s+", " ", self.name).strip()
+    def clean(self):
+        super().clean()
 
-        super().save(*args, **kwargs)
+        if self.name is None or not isinstance(self.name, str):
+            raise ValidationError({
+                "name": "Category name must be a string."
+            })
+
+        self.name = re.sub(r"\s+", " ", self.name).strip()
+
+        if not self.name:
+            raise ValidationError({
+                "name": "Category name cannot be empty."
+            })
+
+        if len(self.name) > 100:
+            raise ValidationError({
+                "name": "Ensure this value has at most 100 characters."
+            })
+
+        if not any(char.isalnum() for char in self.name):
+            raise ValidationError({
+                "name": "Category name must contain a letter or number."
+            })
+
+        if self.name.isdigit() or not any(
+            char.isalpha() for char in self.name
+        ):
+            raise ValidationError({
+                "name": (
+                    "Category name must contain at least one letter "
+                    "and cannot be only numbers."
+                )
+            })
+
+        if self.description is None:
+            self.description = ""
+        elif not isinstance(self.description, str):
+            raise ValidationError({
+                "description": "Description must be a string."
+            })
+        else:
+            self.description = re.sub(
+                r"\s+", " ", self.description
+            ).strip()
+            if len(self.description) > 2000:
+                raise ValidationError({
+                    "description": (
+                        "Ensure this value has at most 2000 characters."
+                    )
+                })
+            if self.description and (
+                self.description.isdigit()
+                or not any(char.isalpha() for char in self.description)
+            ):
+                raise ValidationError({
+                    "description": (
+                        "Description must contain at least one letter "
+                        "and cannot be only numbers."
+                    )
+                })
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

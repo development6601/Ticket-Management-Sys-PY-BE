@@ -4,9 +4,7 @@ from collections.abc import Mapping
 from django.db.models.functions import Lower
 from rest_framework import serializers
 
-from apps.accounts.validators import validate_category_name
 from apps.tickets.models import TicketCategory
-
 
 class TicketCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -16,11 +14,13 @@ class TicketCategorySerializer(serializers.ModelSerializer):
             "name",
             "description",
             "is_active",
+            "position",
             "created_at",
             "updated_at",
         ]
         read_only_fields = [
             "id",
+            "position",
             "created_at",
             "updated_at",
         ]
@@ -65,6 +65,24 @@ class TicketCategorySerializer(serializers.ModelSerializer):
                 for field in sorted(unknown_fields)
             })
 
+        if (
+            "name" in data
+            and data["name"] is not None
+            and not isinstance(data["name"], str)
+        ):
+            raise serializers.ValidationError({
+                "name": ["Category name must be a string."]
+            })
+
+        if (
+            "description" in data
+            and data["description"] is not None
+            and not isinstance(data["description"], str)
+        ):
+            raise serializers.ValidationError({
+                "description": ["Description must be a string."]
+            })
+
         if "is_active" in data and type(data["is_active"]) is not bool:
             raise serializers.ValidationError({
                 "is_active": [
@@ -75,23 +93,36 @@ class TicketCategorySerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_name(self, value):
-        name = validate_category_name(value)
+        name = re.sub(r"\s+", " ", value).strip()
 
-        queryset = TicketCategory.objects.annotate(
-            normalized_name=Lower("name")
-        ).filter(
-            normalized_name=name.lower()
+        if not name:
+            raise serializers.ValidationError(
+                "Category name cannot be empty."
+            )
+
+        if not any(char.isalnum() for char in name):
+            raise serializers.ValidationError(
+                "Category name must contain a letter or number."
+            )
+
+        if name.isdigit() or not any(char.isalpha() for char in name):
+            raise serializers.ValidationError(
+                "Category name must contain at least one letter and cannot be only numbers."
+            )
+
+        customer = self.context["customer"]
+
+        queryset = TicketCategory.objects.filter(
+            customer=customer,
+            name__iexact=name,
         )
 
-        # update the description without having already exist name error.
         if self.instance:
-            queryset = queryset.exclude(
-                pk=self.instance.pk
-            )
+            queryset = queryset.exclude(pk=self.instance.pk)
 
         if queryset.exists():
             raise serializers.ValidationError(
-                "A category with this name already exists."
+                "A category with this name already exists for this company."
             )
 
         return name
@@ -99,7 +130,15 @@ class TicketCategorySerializer(serializers.ModelSerializer):
     def validate_description(self, value):
         if value is None:
             return ""
-        return re.sub(r"\s+", " ", value).strip()
+        description = re.sub(r"\s+", " ", value).strip()
+        if description and (
+            description.isdigit()
+            or not any(char.isalpha() for char in description)
+        ):
+            raise serializers.ValidationError(
+                "Description must contain at least one letter and cannot be only numbers."
+            )
+        return description
 
     def validate(self, attrs):
         if self.instance is not None and not attrs:

@@ -1,4 +1,6 @@
+import ipaddress
 import re
+from collections.abc import Mapping
 
 from django.db.models import Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
@@ -13,6 +15,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.customers.models import CustomerUser
 from apps.tickets.api.serializers.categories import (
     TicketCategoryDeleteResponseSerializer,
     TicketCategoryErrorResponseSerializer,
@@ -23,6 +26,7 @@ from apps.tickets.api.serializers.categories import (
 from apps.tickets.models import TicketCategory
 from apps.tickets.permissions import (
     TicketCategoryPermission,
+    resolve_ticket_category_customer,
     user_can_manage_ticket_categories,
 )
 from apps.tickets.services.categories import TicketCategoryService
@@ -35,6 +39,8 @@ class TicketCategoryPagination(PageNumberPagination):
 
 
 ALLOWED_CATEGORY_ORDERING = {
+    "position",
+    "-position",
     "name",
     "-name",
     "created_at",
@@ -44,15 +50,10 @@ ALLOWED_CATEGORY_ORDERING = {
 }
 
 
-def get_visible_categories(user, *, can_manage=None):
-    """
-    Users with the manage permission see every category.
-    Authorized viewers without manage permission only see active categories.
-    """
-    categories = TicketCategory.objects.all()
-
-    if can_manage is None:
-        can_manage = user_can_manage_ticket_categories(user)
+def get_visible_categories(customer, *, can_manage=False):
+    categories = TicketCategory.objects.filter(
+        customer=customer,
+    )
 
     if not can_manage:
         categories = categories.filter(is_active=True)
@@ -63,9 +64,19 @@ def get_visible_categories(user, *, can_manage=None):
 def get_request_audit_meta(request):
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded_for:
-        ip_address = forwarded_for.split(",")[0].strip()
+        raw_ip = forwarded_for.split(",")[0].strip()
     else:
-        ip_address = request.META.get("REMOTE_ADDR")
+        raw_ip = (request.META.get("REMOTE_ADDR") or "").strip()
+
+    if raw_ip:
+        try:
+            ipaddress.ip_address(raw_ip)
+            ip_address = raw_ip
+        except ValueError:
+            ip_address = None
+    else:
+        ip_address = None
+
     user_agent = request.META.get("HTTP_USER_AGENT", "")
     return ip_address, user_agent
 
@@ -113,18 +124,32 @@ class BaseTicketCategoryView(APIView):
         response = super().handle_exception(exc)
         return format_category_exception_response(exc, response)
 
-    @staticmethod
-    def can_manage(request):
+    def get_customer(self, request):
+        return resolve_ticket_category_customer(request, self)
+
+    def can_manage(self, request, customer=None):
         cached = getattr(request, "_can_manage_ticket_categories", None)
         if cached is not None:
             return cached
-        return user_can_manage_ticket_categories(request.user)
+        if customer is None:
+            customer = self.get_customer(request)
+        return user_can_manage_ticket_categories(request.user, customer)
 
-    def get_visible_categories(self, request):
+    def get_visible_categories(self, request, customer=None):
+        if customer is None:
+            customer = self.get_customer(request)
         return get_visible_categories(
-            request.user,
-            can_manage=self.can_manage(request),
+            customer,
+            can_manage=self.can_manage(request, customer),
         )
+
+    @staticmethod
+    def _extract_payload(request_data):
+        if not isinstance(request_data, Mapping):
+            return request_data
+        payload = dict(request_data)
+        payload.pop("customer_id", None)
+        return payload
 
     @staticmethod
     def api_response(
@@ -151,6 +176,13 @@ class TicketCategoryListView(BaseTicketCategoryView):
         tags=["Ticket Categories"],
         parameters=[
             OpenApiParameter(
+                name="customer_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Target company UUID (required for internal users).",
+            ),
+            OpenApiParameter(
                 name="search",
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
@@ -170,8 +202,8 @@ class TicketCategoryListView(BaseTicketCategoryView):
                 location=OpenApiParameter.QUERY,
                 required=False,
                 description=(
-                    "Allowed values: name, -name, created_at, "
-                    "-created_at, updated_at, -updated_at."
+                    "Allowed values: position, -position, name, -name, "
+                    "created_at, -created_at, updated_at, -updated_at."
                 ),
             ),
             OpenApiParameter(
@@ -198,9 +230,10 @@ class TicketCategoryListView(BaseTicketCategoryView):
         ),
     )
     def get(self, request):
-        can_manage = self.can_manage(request)
+        customer = self.get_customer(request)
+        can_manage = self.can_manage(request, customer)
         categories = get_visible_categories(
-            request.user,
+            customer,
             can_manage=can_manage,
         )
 
@@ -233,12 +266,14 @@ class TicketCategoryListView(BaseTicketCategoryView):
                 is_active=is_active_clean == "true"
             )
 
-        ordering = (request.query_params.get("ordering") or "").strip() or "name"
+        ordering = (
+            request.query_params.get("ordering") or ""
+        ).strip() or "position"
         if ordering not in ALLOWED_CATEGORY_ORDERING:
             return self.api_response(
                 "Invalid ordering field. Allowed values are: "
-                "name, -name, created_at, -created_at, "
-                "updated_at, -updated_at.",
+                "position, -position, name, -name, created_at, "
+                "-created_at, updated_at, -updated_at.",
                 success=False,
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
@@ -278,6 +313,7 @@ class TicketCategoryListView(BaseTicketCategoryView):
         serializer = TicketCategorySerializer(
             page,
             many=True,
+            context={"customer": customer},
         )
 
         return self.api_response(
@@ -298,14 +334,24 @@ class TicketCategoryListView(BaseTicketCategoryView):
         summary="Create ticket category",
     )
     def post(self, request):
+        customer = self.get_customer(request)
+        if isinstance(request.data, Mapping) and "customer_id" in request.data:
+            if CustomerUser.objects.filter(user=request.user).exists():
+                raise ValidationError({
+                    "customer_id": ["This field is not allowed."]
+                })
+        payload = self._extract_payload(request.data)
+
         serializer = TicketCategorySerializer(
-            data=request.data,
+            data=payload,
+            context={"customer": customer},
         )
         serializer.is_valid(raise_exception=True)
 
         ip_address, user_agent = get_request_audit_meta(request)
 
         category = TicketCategoryService.create(
+            customer=customer,
             validated_data=serializer.validated_data,
             performed_by=request.user,
             ip_address=ip_address,
@@ -314,16 +360,25 @@ class TicketCategoryListView(BaseTicketCategoryView):
 
         return self.api_response(
             "Ticket category created successfully.",
-            data=TicketCategorySerializer(category).data,
+            data=TicketCategorySerializer(
+                category,
+                context={"customer": customer},
+            ).data,
             status_code=status.HTTP_201_CREATED,
         )
 
 
 class TicketCategoryDetailView(BaseTicketCategoryView):
 
-    def get_category(self, request, id):
+    def get_category(self, request, id, customer=None):
+        if customer is None:
+            customer = self.get_customer(request)
+        can_manage = self.can_manage(request, customer)
         try:
-            return self.get_visible_categories(request).get(id=id)
+            return get_visible_categories(
+                customer,
+                can_manage=can_manage,
+            ).get(id=id)
         except TicketCategory.DoesNotExist:
             raise NotFound("Ticket category not found.")
 
@@ -334,11 +389,15 @@ class TicketCategoryDetailView(BaseTicketCategoryView):
         summary="Get ticket category",
     )
     def get(self, request, id):
-        category = self.get_category(request, id)
+        customer = self.get_customer(request)
+        category = self.get_category(request, id, customer=customer)
 
         return self.api_response(
             "Ticket category retrieved successfully.",
-            data=TicketCategorySerializer(category).data,
+            data=TicketCategorySerializer(
+                category,
+                context={"customer": customer},
+            ).data,
         )
 
     @extend_schema(
@@ -349,18 +408,21 @@ class TicketCategoryDetailView(BaseTicketCategoryView):
         summary="Update ticket category",
     )
     def patch(self, request, id):
-        category = self.get_category(request, id)
+        customer = self.get_customer(request)
+        category = self.get_category(request, id, customer=customer)
 
         serializer = TicketCategorySerializer(
             category,
             data=request.data,
             partial=True,
+            context={"customer": customer},
         )
         serializer.is_valid(raise_exception=True)
 
         ip_address, user_agent = get_request_audit_meta(request)
 
         updated_category = TicketCategoryService.update(
+            customer=customer,
             category=category,
             validated_data=serializer.validated_data,
             performed_by=request.user,
@@ -370,7 +432,10 @@ class TicketCategoryDetailView(BaseTicketCategoryView):
 
         return self.api_response(
             "Ticket category updated successfully.",
-            data=TicketCategorySerializer(updated_category).data,
+            data=TicketCategorySerializer(
+                updated_category,
+                context={"customer": customer},
+            ).data,
         )
 
     @extend_schema(
@@ -389,11 +454,13 @@ class TicketCategoryDetailView(BaseTicketCategoryView):
         ),
     )
     def delete(self, request, id):
-        category = self.get_category(request, id)
+        customer = self.get_customer(request)
+        category = self.get_category(request, id, customer=customer)
 
         ip_address, user_agent = get_request_audit_meta(request)
 
         TicketCategoryService.delete(
+            customer=customer,
             category=category,
             performed_by=request.user,
             ip_address=ip_address,

@@ -159,6 +159,7 @@ def get_user_permission_manager(user, required_permission=None):
             or user_has_effective_permission(user, PERMISSIONS_VIEW)
             or user_has_effective_permission(user, USERS_VIEW)
             or user_has_effective_permission(user, USER_PERMISSIONS_VIEW)
+            or user_has_effective_permission(user, TICKET_CATEGORY_CREATE)
             or user_has_effective_permission(user, TICKET_CATEGORY_MANAGE)
         ):
             return "internal", None
@@ -189,12 +190,6 @@ class HasPermission(BasePermission):
 
         if not request.user or not request.user.is_authenticated:
             return False
-
-        # If the requested method is not implemented on the view, allow the request
-        # through so that DRF can dispatch to http_method_not_allowed (returning HTTP 405)
-        handler = getattr(view, request.method.lower(), None)
-        if handler is None:
-            return True
 
         if (
             not request.user.is_active
@@ -228,6 +223,9 @@ class HasPermission(BasePermission):
         )
 
         if not permission:
+            handler = getattr(view, request.method.lower(), None)
+            if handler is None:
+                return True
             return False
 
         return user_has_effective_permission(

@@ -479,8 +479,9 @@ class CustomerUpdateService:
             )
 
             new_membership.is_primary_contact = True
+            new_membership.role = CustomerUser.Role.ADMIN
             new_membership.save(
-                update_fields=["is_primary_contact", "updated_at"]
+                update_fields=["is_primary_contact", "role", "updated_at"]
             )
 
             customer.contact_person = (
