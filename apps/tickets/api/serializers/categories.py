@@ -74,9 +74,13 @@ class TicketCategorySerializer(serializers.ModelSerializer):
                 "name": ["Category name must be a string."]
             })
 
+        if "description" in data and data["description"] is None:
+            raise serializers.ValidationError({
+                "description": ["This field may not be null."]
+            })
+
         if (
             "description" in data
-            and data["description"] is not None
             and not isinstance(data["description"], str)
         ):
             raise serializers.ValidationError({
@@ -128,8 +132,6 @@ class TicketCategorySerializer(serializers.ModelSerializer):
         return name
 
     def validate_description(self, value):
-        if value is None:
-            return ""
         description = re.sub(r"\s+", " ", value).strip()
         if description and (
             description.isdigit()
@@ -167,10 +169,15 @@ class TicketCategoryListResponseSerializer(serializers.Serializer):
     data = TicketCategoryListDataSerializer()
 
 
+class TicketCategoryDeleteDataSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+
+
 class TicketCategoryDeleteResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     message = serializers.CharField()
-    data = serializers.JSONField(allow_null=True, default=None)
+    data = TicketCategoryDeleteDataSerializer()
 
 
 class TicketCategoryErrorResponseSerializer(serializers.Serializer):

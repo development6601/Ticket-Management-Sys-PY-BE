@@ -459,7 +459,7 @@ class TicketCategoryDetailView(BaseTicketCategoryView):
 
         ip_address, user_agent = get_request_audit_meta(request)
 
-        TicketCategoryService.delete(
+        deleted = TicketCategoryService.delete(
             customer=customer,
             category=category,
             performed_by=request.user,
@@ -468,5 +468,6 @@ class TicketCategoryDetailView(BaseTicketCategoryView):
         )
 
         return self.api_response(
-            "Ticket category deleted successfully.",
+            f"Ticket category '{deleted['name']}' deleted successfully.",
+            data=deleted,
         )

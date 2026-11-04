@@ -122,6 +122,13 @@ class UserPermissionService:
                 ).values_list("permission_id", flat=True)
             )
 
+            # Automatically allow any customer-scope permissions that Customer Admins possess
+            customer_modules = {"ticket_category", "tickets"}
+            customer_perm_ids = Permission.objects.filter(
+                module__in=customer_modules
+            ).values_list("id", flat=True)
+            allowed_customer_ids.update(customer_perm_ids)
+
         if manager_type == "customer":
             for permission in permissions:
                 if permission.id not in allowed_customer_ids:

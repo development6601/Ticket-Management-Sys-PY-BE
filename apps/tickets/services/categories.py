@@ -325,9 +325,10 @@ class TicketCategoryService:
                 })
 
         category_id = category.pk
+        category_name = category.name
         old_values = {
             "customer_id": str(category.customer_id),
-            "name": category.name,
+            "name": category_name,
             "description": category.description,
             "is_active": category.is_active,
         }
@@ -347,3 +348,8 @@ class TicketCategoryService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+        return {
+            "id": str(category_id),
+            "name": category_name,
+        }
