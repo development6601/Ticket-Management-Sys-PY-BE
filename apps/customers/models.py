@@ -4,6 +4,9 @@ from django.conf import settings
 import uuid
 from django.utils import timezone
 
+import re
+from django.core.exceptions import ValidationError
+
 # Create your models here.
 from apps.accounts.models import BaseModel
 
@@ -54,12 +57,40 @@ class ActiveCustomerManager(
         return super().get_queryset().alive()
 
 
+# For ticket key 
+TICKET_KEY_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
+
+
+def normalize_ticket_key(value):
+    if not isinstance(value, str):
+        raise ValidationError("Invalid ticket key.")
+
+    key = value.strip().upper()
+
+    if not TICKET_KEY_PATTERN.fullmatch(key):
+        raise ValidationError(
+            "Ticket key must contain 2-10 uppercase letters "
+            "or numbers and start with a letter."
+        )
+
+    return key 
+
 class Customer(BaseModel):
     objects = ActiveCustomerManager()
     all_objects = CustomerQuerySet.as_manager()
 
     company_name = models.CharField(
         max_length=255,
+    )
+
+    ticket_key = models.CharField(
+        max_length=10,
+        unique=True,
+    )
+
+    ticket_counter = models.PositiveBigIntegerField(
+        default=0,
+        editable=False,
     )
 
     contact_person = models.CharField(
@@ -145,8 +176,12 @@ class Customer(BaseModel):
             )
 
     def save(self, *args, **kwargs):
+        if self.ticket_key is not None:
+            self.ticket_key = normalize_ticket_key(self.ticket_key)
+
         if isinstance(self.company_name, str):
             self.company_name = normalize_company_name(self.company_name)
+        
         super().save(*args, **kwargs)
 
     def __str__(self):

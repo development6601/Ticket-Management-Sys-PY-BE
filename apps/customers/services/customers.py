@@ -1,4 +1,8 @@
-from django.db import transaction
+import hashlib
+import re
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import connection, transaction, IntegrityError
 from django.utils import timezone
 
 from rest_framework.exceptions import (
@@ -15,9 +19,62 @@ from apps.accounts.models import (
     PasswordResetRequest,
 )
 from apps.accounts.services.authentication import AuthenticationService
-from apps.customers.models import Customer, CustomerUser, normalize_company_name
+from apps.customers.models import Customer, CustomerUser, normalize_company_name, normalize_ticket_key
 from apps.notifications.models import EmailJob
 from apps.tickets.services.categories import seed_customer_categories
+from apps.tickets.services.status import seed_customer_statuses
+
+
+_TICKET_KEY_NOT_PROVIDED = object()
+
+
+def lock_ticket_key_base(base_key):
+    if connection.vendor == "postgresql":
+        digest = hashlib.sha256(
+            f"ticket-key:{base_key}".encode("utf-8")
+        ).digest()
+        lock_key = int.from_bytes(
+            digest[:8],
+            byteorder="big",
+            signed=True,
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(%s)",
+                [lock_key],
+            )
+
+
+def allocate_available_ticket_key(base_key):
+    lock_ticket_key_base(base_key)
+
+    base = base_key
+    suffix_num = 1
+    while True:
+        if suffix_num == 1:
+            candidate = base
+        else:
+            suffix = str(suffix_num)
+            candidate = f"{base[:10 - len(suffix)]}{suffix}"
+
+        if not Customer.all_objects.filter(ticket_key=candidate).exists():
+            return candidate
+        suffix_num += 1
+
+
+def ticket_key_base(company_name):
+    words = re.findall(r"[A-Za-z0-9]+", company_name)
+
+    initials = "".join(word[0] for word in words).upper()
+
+    if len(initials) < 2:
+        letters = re.sub(r"[^A-Za-z0-9]", "", company_name).upper()
+        initials = letters[:2]
+
+    if not initials or not initials[0].isalpha():
+        initials = "C" + initials
+
+    return normalize_ticket_key(initials[:10].ljust(2, "C"))
 
 
 class CustomerCreationService:
@@ -38,20 +95,91 @@ class CustomerCreationService:
         account_status=Customer.AccountStatus.PENDING_VERIFICATION,
         account_manager=None,
         notes="",
+        ticket_key=_TICKET_KEY_NOT_PROVIDED,
     ):
-        customer = Customer.objects.create(
-            company_name=normalize_company_name(company_name),
-            contact_person=contact_person,
-            email=email,
-            phone=phone,
-            address=address,
-            state=state,
-            country=country,
-            is_active=is_active,
-            account_status=account_status,
-            account_manager=account_manager,
-            notes=notes,
-        )
+        if ticket_key is _TICKET_KEY_NOT_PROVIDED:
+            base_key = ticket_key_base(company_name)
+            lock_ticket_key_base(base_key)
+
+            suffix_num = 1
+            while True:
+                if suffix_num == 1:
+                    candidate = base_key
+                else:
+                    suffix = str(suffix_num)
+                    candidate = f"{base_key[:10 - len(suffix)]}{suffix}"
+
+                if Customer.all_objects.filter(ticket_key=candidate).exists():
+                    suffix_num += 1
+                    continue
+
+                try:
+                    with transaction.atomic():
+                        customer = Customer.objects.create(
+                            company_name=normalize_company_name(company_name),
+                            ticket_key=candidate,
+                            ticket_counter=0,
+                            contact_person=contact_person,
+                            email=email,
+                            phone=phone,
+                            address=address,
+                            state=state,
+                            country=country,
+                            is_active=is_active,
+                            account_status=account_status,
+                            account_manager=account_manager,
+                            notes=notes,
+                        )
+                        break
+                except IntegrityError as exc:
+                    if (
+                        Customer.all_objects.filter(ticket_key=candidate).exists()
+                        or "ticket_key" in str(exc).lower()
+                    ):
+                        suffix_num += 1
+                        continue
+                    raise
+        else:
+            try:
+                allocated_ticket_key = normalize_ticket_key(ticket_key)
+            except DjangoValidationError as exc:
+                raise ValidationError({
+                    "ticket_key": exc.messages
+                }) from exc
+
+            if Customer.all_objects.filter(ticket_key=allocated_ticket_key).exists():
+                raise ValidationError({
+                    "ticket_key": ["This ticket key is already in use."]
+                })
+
+            lock_ticket_key_base(allocated_ticket_key)
+
+            try:
+                with transaction.atomic():
+                    customer = Customer.objects.create(
+                        company_name=normalize_company_name(company_name),
+                        ticket_key=allocated_ticket_key,
+                        ticket_counter=0,
+                        contact_person=contact_person,
+                        email=email,
+                        phone=phone,
+                        address=address,
+                        state=state,
+                        country=country,
+                        is_active=is_active,
+                        account_status=account_status,
+                        account_manager=account_manager,
+                        notes=notes,
+                    )
+            except IntegrityError as exc:
+                if (
+                    "ticket_key" in str(exc).lower()
+                    or Customer.all_objects.filter(ticket_key=allocated_ticket_key).exists()
+                ):
+                    raise ValidationError({
+                        "ticket_key": ["This ticket key is already in use."]
+                    })
+                raise
 
         if primary_user is not None:
             CustomerUser.objects.create(
@@ -61,7 +189,10 @@ class CustomerCreationService:
                 role=CustomerUser.Role.ADMIN,
             )
 
+        # Existing customer creation logic remains unchanged.
         seed_customer_categories(customer)
+        # NEW: Initialize the company's ticket workflow.
+        seed_customer_statuses(customer)
 
         return customer
 

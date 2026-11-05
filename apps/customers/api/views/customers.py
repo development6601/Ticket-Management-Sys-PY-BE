@@ -331,8 +331,34 @@ class CustomerDetailView(APIView):
             self.required_permission = CUSTOMERS_VIEW
         elif self.request.method == "PATCH":
             self.required_permission = CUSTOMERS_UPDATE
+            # Ticket-key-only updates are authorized by the service,
+            # including company membership, admin role, and key lock.
+            try:
+                data = self.request.data
+                if (
+                    isinstance(data, dict)
+                    and set(data.keys()) == {"ticket_key"}
+                ):
+                    return [IsAuthenticated()]
+            except Exception:
+                pass
 
         return super().get_permissions()
+
+    def handle_exception(self, exc):
+        from rest_framework.exceptions import PermissionDenied
+        if isinstance(exc, PermissionDenied):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Customer update failed.",
+                    "data": {
+                        "detail": str(exc.detail) if hasattr(exc, "detail") else str(exc)
+                    },
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().handle_exception(exc)
     
 
     @extend_schema(
@@ -492,6 +518,17 @@ class CustomerDetailView(APIView):
                     "data": exc.detail,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PermissionDenied as exc:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Customer update failed.",
+                    "data": {
+                        "detail": str(exc.detail)
+                    },
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         return Response(

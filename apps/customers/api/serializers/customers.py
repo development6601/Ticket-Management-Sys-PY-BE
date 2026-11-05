@@ -1,9 +1,15 @@
 from collections.abc import Mapping
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from apps.customers.models import Customer, normalize_company_name, CustomerUser
+from apps.customers.models import (
+    Customer,
+    normalize_company_name,
+    CustomerUser,
+    normalize_ticket_key,
+)
 from apps.accounts.models import User, UserRole
 from apps.accounts.validators import (
     PhoneNumberField,
@@ -28,6 +34,8 @@ class CustomerListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "company_name",
+            "ticket_key",
+            "ticket_counter",
             "contact_person",
             "email",
             "phone",
@@ -95,6 +103,15 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         max_length=50,
     )
 
+    ticket_key = serializers.CharField(
+        min_length=2,
+        max_length=10,
+        required=False,
+        allow_blank=False,
+        allow_null=False,
+        trim_whitespace=True,
+    )
+
     primary_contact_user_id = serializers.UUIDField(
         required=False,
         write_only=True,
@@ -104,6 +121,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             "company_name",
+            "ticket_key",
             "contact_person",
             "email",
             "phone",
@@ -114,6 +132,12 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
             "notes",
             "primary_contact_user_id",
         ]
+
+    def validate_ticket_key(self, value):
+        try:
+            return normalize_ticket_key(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
 
     def validate_account_manager(self, value):
         # Allow removing the assigned account manager.

@@ -21,12 +21,26 @@ from apps.accounts.validators import validate_phone_for_country
 from apps.customers.models import Customer, CustomerUser
 from apps.customers.permissions import CUSTOMERS_UPDATE
 from apps.notifications.models import EmailJob
+from apps.tickets.models import Ticket
 
 # Fields that only an internal administrator may change.
 ADMIN_ONLY_FIELDS = {
     "account_manager",
     "notes",
 }
+
+
+def is_ticket_key_unique_violation(exc):
+    cause = getattr(exc, "__cause__", None)
+    constraint_name = getattr(
+        getattr(cause, "diag", None),
+        "constraint_name",
+        None,
+    )
+    return constraint_name in {
+        "customers_customer_ticket_key_key",
+        "unique_customer_ticket_key",
+    }
 
 
 class CustomerUpdateService:
@@ -359,6 +373,34 @@ class CustomerUpdateService:
             performed_by=performed_by,
         )
 
+        if "email" in validated_data and "ticket_key" in validated_data:
+            raise ValidationError({
+                "email": (
+                    "Email changes must be requested separately "
+                    "from other customer updates."
+                )
+            })
+
+        if "ticket_key" in validated_data:
+            new_key = validated_data["ticket_key"]
+            if new_key != customer.ticket_key:
+                if (
+                    customer.ticket_counter > 0
+                    or Ticket.objects.filter(customer=customer).exists()
+                ):
+                    raise ValidationError({
+                        "ticket_key": (
+                            "Ticket key cannot be changed after "
+                            "the first ticket has been created."
+                        )
+                    })
+                if Customer.all_objects.filter(
+                    ticket_key=new_key
+                ).exclude(pk=customer.pk).exists():
+                    raise ValidationError({
+                        "ticket_key": "This ticket key is already in use."
+                    })
+
         if "account_manager" in validated_data:
             CustomerUpdateService._validate_account_manager(
                 validated_data["account_manager"]
@@ -545,7 +587,19 @@ class CustomerUpdateService:
             update_fields.add(field)
 
         if update_fields:
-            customer.save(update_fields=list(update_fields) + ["updated_at"])
+            try:
+                with transaction.atomic():
+                    customer.save(
+                        update_fields=list(update_fields) + ["updated_at"]
+                    )
+            except IntegrityError as exc:
+                if is_ticket_key_unique_violation(exc):
+                    raise ValidationError({
+                        "ticket_key": [
+                            "This ticket key is already in use."
+                        ]
+                    }) from exc
+                raise
 
         return customer
 
@@ -644,6 +698,17 @@ class CustomerUpdateService:
                 + ", ".join(sorted(forbidden))
             )
 
+        if "ticket_key" in validated_data:
+            is_customer_admin = (
+                membership is not None
+                and membership.customer_id == customer.pk
+                and membership.role == CustomerUser.Role.ADMIN
+            )
+            if not is_internal_admin and not is_customer_admin:
+                raise PermissionDenied(
+                    "Only a customer administrator or an internal administrator can change the ticket key."
+                )
+
         if is_internal_admin:
             return
 
@@ -683,6 +748,17 @@ class CustomerUpdateService:
                 raise PermissionDenied(
                     "Only the primary contact can transfer ownership."
                 )
+
+            # A secondary Customer Admin may update only the ticket key
+            # through this special authorization path.
+            is_customer_admin = (
+                membership is not None
+                and membership.customer_id == customer.pk
+                and membership.role == CustomerUser.Role.ADMIN
+            )
+            if "ticket_key" in validated_data and is_customer_admin:
+                if set(validated_data) == {"ticket_key"}:
+                    return
 
             if not is_primary:
                 raise PermissionDenied(
