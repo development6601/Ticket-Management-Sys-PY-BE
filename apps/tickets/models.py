@@ -757,6 +757,18 @@ class TicketAssignment(BaseModel):
         blank=True,
     )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ticket"],
+                condition=models.Q(
+                    unassigned_at__isnull=True,
+                    employee__isnull=False,
+                ),
+                name="one_active_employee_assignment",
+            ),
+        ]
+
     def __str__(self):
         employee = self.employee.email if self.employee else "Unassigned"
         return f"{self.ticket.ticket_number} - {self.team.name} - {employee}"

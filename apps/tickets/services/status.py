@@ -72,6 +72,10 @@ def seed_customer_statuses(customer):
                         f"Review the existing workflow."
                     )
                 })
+        from apps.tickets.services.transition_seed import (
+            seed_customer_transitions,
+        )
+        seed_customer_transitions(locked_customer)
         return
 
     for config in DEFAULT_TICKET_STATUSES:
@@ -87,3 +91,10 @@ def seed_customer_statuses(customer):
             is_closed=config["is_closed"],
             created_by=None,
         )
+
+    # Create the default workflow edges after all four
+    # statuses have been created successfully.
+    from apps.tickets.services.transition_seed import (
+        seed_customer_transitions,
+    )
+    seed_customer_transitions(locked_customer)

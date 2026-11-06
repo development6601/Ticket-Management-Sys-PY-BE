@@ -27,7 +27,16 @@ TICKETS_VIEW = "tickets.view"
 TICKETS_CREATE = "tickets.create"
 TICKETS_UPDATE = "tickets.update"
 TICKETS_MANAGE = "tickets.manage"
+
+# Ticket workflow permissions
 TICKET_START = "tickets.start"
 TICKET_RESOLVE = "tickets.resolve"
-TICKET_CONFIRM = "tickets.confirm"
+TICKET_CLOSE = "tickets.close"
 TICKET_REOPEN = "tickets.reopen"
+TICKET_TRANSITION = "tickets.transition"
+
+# Ticket assignment permissions
+TICKET_ASSIGN = "tickets.assign"
+TICKET_REASSIGN = "tickets.reassign"
+TICKET_UNASSIGN = "tickets.unassign"
+TICKET_TRANSFER = "tickets.transfer"
