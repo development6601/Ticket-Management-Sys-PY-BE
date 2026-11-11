@@ -1,3 +1,4 @@
+# apps/accounts/permissions/constants.py
 USERS_VIEW = "users.view"
 USERS_CREATE_INTERNAL = "users.create_internal"
 USERS_CREATE_CUSTOMER = "users.create_customer"
@@ -40,3 +41,8 @@ TICKET_ASSIGN = "tickets.assign"
 TICKET_REASSIGN = "tickets.reassign"
 TICKET_UNASSIGN = "tickets.unassign"
 TICKET_TRANSFER = "tickets.transfer"
+
+
+# Customer assignment permissions
+TICKET_ASSIGN_TEAM = "tickets.assign_team"
+TICKET_ASSIGN_EMPLOYEE = "tickets.assign_employee"

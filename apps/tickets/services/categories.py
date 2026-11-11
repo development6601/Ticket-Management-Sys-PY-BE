@@ -40,6 +40,7 @@ def seed_customer_categories(customer):
                 "description": "",
                 "is_active": True,
                 "position": position,
+                "is_default": name == "General Question",
             },
         )
 

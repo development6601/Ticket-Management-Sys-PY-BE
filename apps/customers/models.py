@@ -141,6 +141,15 @@ class Customer(BaseModel):
         blank=True,
     )
 
+    # default team system use 
+    default_support_team = models.ForeignKey(
+        "support.SupportTeam",
+        on_delete=models.PROTECT,
+        related_name="default_for_customers",
+        null=True,
+        blank=True,
+    )
+
     notes = models.TextField(
         blank=True
     )

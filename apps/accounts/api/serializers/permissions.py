@@ -196,9 +196,10 @@ class UpdatePermissionSerializer(serializers.ModelSerializer):
         return attrs
 
 class DeletePermissionSerializer(serializers.Serializer):
-    ids = extend_schema_field(
-        serializers.ListField(child=serializers.UUIDField())
-    )(serializers.JSONField())
+    ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more permission UUIDs to delete.",
+    )
 
     def to_internal_value(self, data):
         if not isinstance(data, Mapping):
@@ -294,12 +295,14 @@ class PermissionDetailResponseSerializer(serializers.Serializer):
     
 
 class AssignPermissionToRoleSerializer(serializers.Serializer):
-    role_ids = extend_schema_field(
-        serializers.ListField(child=serializers.UUIDField())
-    )(serializers.JSONField())
-    permission_ids = extend_schema_field(
-        serializers.ListField(child=serializers.UUIDField())
-    )(serializers.JSONField())
+    role_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more role UUIDs.",
+    )
+    permission_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more permission UUIDs to assign.",
+    )
 
     def to_internal_value(self, data):
         if not isinstance(data, Mapping):
@@ -398,12 +401,14 @@ class AssignRolePermissionResponseSerializer(serializers.Serializer):
 
 
 class RemovePermissionFromRoleSerializer(serializers.Serializer):
-    role_ids = extend_schema_field(
-        serializers.ListField(child=serializers.UUIDField())
-    )(serializers.JSONField())
-    permission_ids = extend_schema_field(
-        serializers.ListField(child=serializers.UUIDField())
-    )(serializers.JSONField())
+    role_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more role UUIDs.",
+    )
+    permission_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more permission UUIDs to remove.",
+    )
 
     def to_internal_value(self, data):
         if not isinstance(data, Mapping):
@@ -493,18 +498,14 @@ class RemoveRolePermissionResponseSerializer(serializers.Serializer):
     data = RemoveRolePermissionDataSerializer()
 
 class UserPermissionBulkSerializer(serializers.Serializer):
-    user_ids = extend_schema_field(
-        serializers.ListField(
-            child=serializers.UUIDField(),
-            help_text="One or more target user UUIDs.",
-        )
-    )(serializers.JSONField())
-    permission_ids = extend_schema_field(
-        serializers.ListField(
-            child=serializers.UUIDField(),
-            help_text="One or more permission UUIDs to assign or remove.",
-        )
-    )(serializers.JSONField())
+    user_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more target user UUIDs.",
+    )
+    permission_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text="One or more permission UUIDs to assign or remove.",
+    )
 
     def to_internal_value(self, data):
         if not isinstance(data, Mapping):

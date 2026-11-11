@@ -302,7 +302,8 @@ def validate_assignment_status(ticket):
 
 def validate_assignment_employee(*, employee, team_id):
     """
-    Validate the employee selected for assignment.
+    Validate that the selected employee is eligible
+    for the specified support team.
     """
     if employee is None:
         return
@@ -319,7 +320,8 @@ def validate_assignment_employee(*, employee, team_id):
         or not employee.email_verified
     ):
         raise PermissionDenied(
-            "The selected employee must have an active, verified account."
+            "The selected employee must have an active, "
+            "verified account."
         )
 
     if get_customer_membership(employee) is not None:
@@ -328,10 +330,13 @@ def validate_assignment_employee(*, employee, team_id):
             "as support agents."
         )
 
-    if not is_active_team_member(employee, team_id):
+    if not (
+        is_active_team_member(employee, team_id)
+        or is_team_manager(employee, team_id)
+    ):
         raise PermissionDenied(
-            "The selected employee must be an "
-            "active member of the support team."
+            "The selected employee must be an active "
+            "member or manager of the support team."
         )
 
 
@@ -345,15 +350,15 @@ def authorize_ticket_assignment(
     target_employee=None,
 ):
     """
-    Authorize a manual ticket assignment operation.
+    Authorize assignment operations for internal and
+    customer users.
 
-    The caller must lock the ticket before calling
-    this function.
+    Customer users require explicit assignment permissions.
+    Internal users retain the existing team-based rules.
     """
+
     if action not in ASSIGNMENT_PERMISSIONS:
-        raise PermissionDenied(
-            "Invalid assignment action."
-        )
+        raise PermissionDenied("Invalid assignment action.")
 
     if not can_view_ticket(user, ticket):
         raise PermissionDenied(
@@ -362,16 +367,83 @@ def authorize_ticket_assignment(
 
     validate_assignment_status(ticket)
 
-    if get_customer_membership(user) is not None:
-        raise PermissionDenied(
-            "Customers cannot manage ticket assignments."
-        )
+    membership = get_customer_membership(user)
 
-    if not ticket.assigned_team_id:
-        raise PermissionDenied(
-            "The ticket must have a support team."
-        )
 
+    # CUSTOMER USER
+    if membership is not None:
+
+        # Customer users can only assign tickets belonging
+        # to their own company.
+        if membership.customer_id != ticket.customer_id:
+            raise PermissionDenied(
+                "You cannot assign tickets belonging "
+                "to another company."
+            )
+
+        if action not in ("assign", "transfer"):
+            raise PermissionDenied(
+                "Customer users cannot perform this "
+                "assignment operation."
+            )
+
+        # Selecting/changing a team requires a separate
+        # permission.
+        if action == "transfer":
+            if not user_has_effective_permission(
+                user, "tickets.assign_team"
+            ):
+                raise PermissionDenied(
+                    "You do not have permission to "
+                    "select a support team."
+                )
+
+        # Selecting an employee requires a separate
+        # permission.
+        if target_employee is not None:
+            if not user_has_effective_permission(
+                user, "tickets.assign_employee"
+            ):
+                raise PermissionDenied(
+                    "You do not have permission to "
+                    "select a support employee."
+                )
+
+        # Customers cannot assign customer users as agents.
+        if target_employee is not None:
+            validate_assignment_employee(
+                employee=target_employee,
+                team_id=(
+                    target_team_id
+                    if action == "transfer"
+                    else ticket.assigned_team_id
+                ),
+            )
+
+        if action == "transfer":
+            if not target_team_id:
+                raise PermissionDenied(
+                    "A destination support team is required."
+                )
+
+            if str(target_team_id) == str(
+                ticket.assigned_team_id
+            ):
+                raise PermissionDenied(
+                    "Select a different support team."
+                )
+
+            if not SupportTeam.objects.filter(
+                pk=target_team_id,
+                is_active=True,
+            ).exists():
+                raise PermissionDenied(
+                    "The destination support team must be active."
+                )
+
+        return
+
+    # INTERNAL USER
     permission_code = ASSIGNMENT_PERMISSIONS[action]
 
     if not user_has_effective_permission(
@@ -379,6 +451,11 @@ def authorize_ticket_assignment(
     ):
         raise PermissionDenied(
             f"This action requires {permission_code}."
+        )
+
+    if not ticket.assigned_team_id:
+        raise PermissionDenied(
+            "The ticket must have a support team."
         )
 
     source_team_id = ticket.assigned_team_id
@@ -404,6 +481,7 @@ def authorize_ticket_assignment(
                     "You must manage both the source "
                     "and destination support teams."
                 )
+
         elif not (
             is_team_manager(user, source_team_id)
             or is_active_team_member(user, source_team_id)
@@ -419,8 +497,7 @@ def authorize_ticket_assignment(
             is_active=True,
         ).exists():
             raise PermissionDenied(
-                "The destination support team "
-                "must be active."
+                "The destination support team must be active."
             )
 
     if target_employee is not None:

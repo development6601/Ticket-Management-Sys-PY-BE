@@ -332,14 +332,15 @@ def change_ticket_assignment(
     else:
         new_team = locked_ticket.assigned_team
 
-    # Create new assignment record if employee is assigned
-    if target_employee is not None:
+    # Record the new assignment state, including team-only
+    # assignments where no employee has been selected.
+    if new_team is not None:
         TicketAssignment.objects.create(
             ticket=locked_ticket,
             team=new_team,
             employee=target_employee,
             assigned_by=user,
-            reason=reason or "",
+            reason=reason or "Assignment updated.",
         )
 
     # Update ticket fields

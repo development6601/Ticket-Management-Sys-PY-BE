@@ -1,5 +1,4 @@
 import uuid
-from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from collections.abc import Mapping
@@ -190,9 +189,11 @@ class RoleDetailResponseSerializer(serializers.Serializer):
 
 
 class DeleteRoleSerializer(serializers.Serializer):
-    ids = extend_schema_field(
-        serializers.ListField(child=serializers.UUIDField())
-    )(serializers.JSONField(required=False))
+    ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        help_text="One or more role UUIDs to delete.",
+    )
     all = serializers.BooleanField(required=False, default=False)
 
     def to_internal_value(self, data):

@@ -14,12 +14,15 @@ class TicketCategorySerializer(serializers.ModelSerializer):
             "name",
             "description",
             "is_active",
+            "is_default",
+            "default_support_team",
             "position",
             "created_at",
             "updated_at",
         ]
         read_only_fields = [
             "id",
+            "is_default",
             "position",
             "created_at",
             "updated_at",
@@ -38,6 +41,15 @@ class TicketCategorySerializer(serializers.ModelSerializer):
             "is_active": {
                 "required": False,
                 "default": True,
+            },
+            "default_support_team": {
+                "required": False,
+                "allow_null": True,
+                "help_text": (
+                    "UUID of the support team that receives tickets "
+                    "created under this category. Leave null to use "
+                    "the customer's default routing."
+                ),
             },
         }
 

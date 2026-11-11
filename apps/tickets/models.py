@@ -98,6 +98,17 @@ class TicketCategory(BaseModel):
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
+    is_default = models.BooleanField(default=False)
+
+    # which supportteam receive tickets created under this category.
+    default_support_team = models.ForeignKey(
+        "support.SupportTeam",
+        on_delete=models.PROTECT,
+        related_name="ticket_categories",
+        null=True,
+        blank=True,
+    )
+
     position = models.PositiveIntegerField(default=0)
 
     objects = TicketCategoryQuerySet.as_manager()
@@ -109,6 +120,11 @@ class TicketCategory(BaseModel):
                 Lower("name"),
                 name="unique_customer_ticket_category",
             ),
+            models.UniqueConstraint(
+                fields=["customer"],
+                condition=models.Q(is_default=True),
+                name="one_default_ticket_category_per_customer"
+            )
         ]
 
     def clean(self):
@@ -173,12 +189,27 @@ class TicketCategory(BaseModel):
                     )
                 })
 
-    def save(self, *args, **kwargs):
-        self.clean()
-        return super().save(*args, **kwargs)
+        if self.default_support_team_id:
+            # from apps.support.models import SupportTeam
 
-    def __str__(self):
-        return self.name
+            team = SupportTeam.objects.filter(
+                pk=self.default_support_team_id,
+                is_active=True,
+            ).first()
+
+            if team is None:
+                raise ValidationError({
+                    "default_support_team": (
+                        "Select an active support team."
+                    )
+                })
+
+            def save(self, *args, **kwargs):
+                self.clean()
+                return super().save(*args, **kwargs)
+
+            def __str__(self):
+                return self.name
 
 class TicketStatus(BaseModel):
     customer = models.ForeignKey(
