@@ -90,19 +90,14 @@ def visible_tickets_queryset(user):
             customer_id=customer.pk
         )
 
-        if membership.is_primary_contact:
+        if membership.is_primary_contact or getattr(membership, "role", "") == CustomerUser.Role.ADMIN:
             return company_tickets
 
         from apps.accounts.permissions.rbac import (
-            user_has_direct_permission,
+            user_has_effective_permission,
         )
 
-        # Members explicitly granted company-wide workflow
-        # authority may access company tickets for those actions.
-        if (
-            user_has_direct_permission(user, "tickets.close")
-            or user_has_direct_permission(user, "tickets.reopen")
-        ):
+        if user_has_effective_permission(user, "tickets.view_all"):
             return company_tickets
 
         return company_tickets.filter(created_by=user)

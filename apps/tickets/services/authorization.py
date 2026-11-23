@@ -4,7 +4,7 @@ from rest_framework.exceptions import PermissionDenied
 from apps.accounts.permissions.rbac import (
     user_has_effective_permission,
 )
-from apps.customers.models import Customer
+from apps.customers.models import Customer, CustomerUser
 from apps.tickets.services.visibility import (
     can_view_ticket,
     get_customer_membership,
@@ -103,14 +103,9 @@ def can_customer_close(user, ticket):
     if membership.customer_id != ticket.customer_id:
         return False
 
-    # Primary contact is the customer administrator
-    # in the current CustomerUser data model.
-    if membership.is_primary_contact:
+    if membership.is_primary_contact or getattr(membership, "role", "") == CustomerUser.Role.ADMIN:
         return True
 
-    # Other customer users must be either the creator
-    # or directly authorized, subject to the permission
-    # check performed by the caller.
     return (
         ticket.created_by_id == user.pk
         or user_has_effective_permission(
@@ -128,7 +123,7 @@ def can_customer_reopen(user, ticket):
     if membership.customer_id != ticket.customer_id:
         return False
 
-    if membership.is_primary_contact:
+    if membership.is_primary_contact or getattr(membership, "role", "") == CustomerUser.Role.ADMIN:
         return True
 
     return (

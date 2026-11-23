@@ -10,4 +10,5 @@ urlpatterns = [
     path("ticket-categories/<uuid:id>/", TicketCategoryDetailView.as_view(), name="ticket-category-detail"),
     path("tickets/<uuid:ticket_id>/assignment/", TicketAssignmentView.as_view(), name="ticket-assignment"),
     path("tickets/", TicketCreateView.as_view(), name="ticket-create"),
+    path("tickets/<str:ticket_number>/", TicketDetailUpdateView.as_view(), name="ticket-detail-update"),
 ]

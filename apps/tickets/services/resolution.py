@@ -49,21 +49,33 @@ def apply_resolution(*, ticket, user, now, resolution_type, resolution_notes):
     return ticket
 
 
-def apply_closure(*, ticket, user, now):
+def apply_closure(
+    *,
+    ticket,
+    user,
+    now,
+    is_customer_confirmation=False,
+):
     if not ticket.resolved_at or not ticket.resolved_by_id:
         raise ValidationError({
-            "status": "The ticket must have valid resolution details before closure."
+            "status": "The ticket must be resolved before closure."
         })
 
-    if not ticket.resolution_type or not ticket.resolution_notes.strip():
+    if (
+        not ticket.resolution_type
+        or not isinstance(ticket.resolution_notes, str)
+        or not ticket.resolution_notes.strip()
+    ):
         raise ValidationError({
             "status": "Resolution type and notes are required before closure."
         })
 
     ticket.closed_at = now
     ticket.closed_by = user
-    ticket.resolution_confirmed_at = now
-    ticket.resolution_confirmed_by = user
+
+    if is_customer_confirmation:
+        ticket.resolution_confirmed_at = now
+        ticket.resolution_confirmed_by = user
 
     return ticket
 

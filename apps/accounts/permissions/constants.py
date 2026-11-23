@@ -25,6 +25,7 @@ TICKET_CATEGORY_CREATE = "ticket_category.create"
 TICKET_CATEGORY_MANAGE = "ticket_category.manage"
 
 TICKETS_VIEW = "tickets.view"
+TICKETS_VIEW_ALL = "tickets.view_all"
 TICKETS_CREATE = "tickets.create"
 TICKETS_UPDATE = "tickets.update"
 TICKETS_MANAGE = "tickets.manage"

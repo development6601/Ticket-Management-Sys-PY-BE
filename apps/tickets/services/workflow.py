@@ -17,6 +17,7 @@ from apps.tickets.services.resolution import (
     validate_reopen_reason,
 )
 from apps.tickets.services.visibility import (
+    get_customer_membership,
     is_active_team_member,
     is_system_admin,
     is_team_manager,
@@ -266,10 +267,12 @@ def execute_ticket_transition(
         )
 
     elif action == "close":
+        membership = get_customer_membership(user)
         apply_closure(
             ticket=ticket,
             user=user,
             now=now,
+            is_customer_confirmation=membership is not None,
         )
 
     elif action == "reopen":
