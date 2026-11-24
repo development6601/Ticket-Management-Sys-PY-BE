@@ -96,6 +96,12 @@ def validate_ticket_creator(*, user, customer):
             "Your account is inactive."
         )
 
+    membership = CustomerUser.objects.filter(user=user).first()
+    if membership is not None and membership.customer_id != customer.pk:
+        raise PermissionDenied(
+            "You cannot create tickets for another company."
+        )
+
     # System administrators can create tickets for any
     # active customer company.
     if user.is_superuser or user_has_effective_permission(

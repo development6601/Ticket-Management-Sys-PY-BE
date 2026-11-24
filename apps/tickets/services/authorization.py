@@ -1,5 +1,8 @@
 
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import (
+    PermissionDenied,
+    ValidationError,
+)
 
 from apps.accounts.permissions.rbac import (
     user_has_effective_permission,
@@ -103,14 +106,15 @@ def can_customer_close(user, ticket):
     if membership.customer_id != ticket.customer_id:
         return False
 
-    if membership.is_primary_contact or getattr(membership, "role", "") == CustomerUser.Role.ADMIN:
+    if (
+        membership.is_primary_contact 
+        or membership.role == CustomerUser.Role.ADMIN
+    ): 
         return True
 
-    return (
-        ticket.created_by_id == user.pk
-        or user_has_effective_permission(
-            user, "tickets.close"
-        )
+    return user_has_effective_permission(
+        user,
+        "tickets.close",
     )
 
 
@@ -123,14 +127,15 @@ def can_customer_reopen(user, ticket):
     if membership.customer_id != ticket.customer_id:
         return False
 
-    if membership.is_primary_contact or getattr(membership, "role", "") == CustomerUser.Role.ADMIN:
+    if (
+        membership.is_primary_contact
+        or membership.role == CustomerUser.Role.ADMIN
+    ):
         return True
 
-    return (
-        ticket.created_by_id == user.pk
-        or user_has_effective_permission(
-            user, "tickets.reopen"
-        )
+    return user_has_effective_permission(
+        user,
+        "tickets.reopen",
     )
 
 
@@ -197,12 +202,16 @@ def authorize_ticket_transition(
                 "Starting work requires tickets.start."
             )
 
-    if not user_has_effective_permission(
-        user, permission_code
-    ):
-        raise PermissionDenied(
-            "You do not have the required permission."
-        )
+    is_customer_close = (action == "close" and can_customer_close(user, ticket))
+    is_customer_reopen = (action == "reopen" and can_customer_reopen(user, ticket))
+
+    if not (is_customer_close or is_customer_reopen):
+        if not user_has_effective_permission(
+            user, permission_code
+        ):
+            raise PermissionDenied(
+                "You do not have the required permission."
+            )
 
     membership = get_customer_membership(user)
 
@@ -224,11 +233,20 @@ def authorize_ticket_transition(
         if is_system_admin(user):
             return action
 
-        if not can_customer_close(user, ticket):
-            raise PermissionDenied(
-                "Only an authorized customer or "
-                "System Admin may close this ticket."
-            )
+        if membership is not None:
+            # Customer user
+            if not can_customer_close(user, ticket):
+                raise PermissionDenied(
+                    "You cannot close this ticket."
+                )
+
+        else:
+            # Internal user
+            if not is_eligible_internal_agent(user, ticket):
+                raise PermissionDenied(
+                    "You are not eligible to close this ticket."
+                )
+
 
     elif action == "reopen":
         if is_system_admin(user):
@@ -276,23 +294,24 @@ ASSIGNMENT_PERMISSIONS = {
     "transfer": "tickets.transfer",
 }
 
+
 def validate_assignment_status(ticket):
     """
-    Manual assignment changes are allowed only
-    in New and In Progress.
+    Assignment is allowed for active tickets that are neither
+    resolved nor closed. Status names are configurable.
     """
     status = ticket.status
     if (
         not status.is_active
         or status.is_resolved
         or status.is_closed
-        or status.name.strip().casefold()
-        not in {"new", "in progress"}
     ):
-        raise PermissionDenied(
-            "Assignment changes are allowed only "
-            "in New or In Progress."
-        )
+        raise ValidationError({
+            "status": (
+                "Assignment changes are not allowed for tickets in "
+                "a resolved or closed status."
+            )
+        })
 
 
 def validate_assignment_employee(*, employee, team_id):
@@ -304,35 +323,48 @@ def validate_assignment_employee(*, employee, team_id):
         return
 
     if not employee.is_authenticated:
-        raise PermissionDenied(
-            "The selected employee must be a valid user."
-        )
+        raise ValidationError({
+            "employee_id": (
+                "The selected employee must be a valid user."
+            )
+        })
 
     if (
         not employee.is_active
-        or employee.account_status
-        != employee.AccountStatus.ACTIVE
-        or not employee.email_verified
+        or employee.account_status != employee.AccountStatus.ACTIVE
     ):
-        raise PermissionDenied(
-            "The selected employee must have an active, "
-            "verified account."
-        )
+        raise ValidationError({
+            "employee_id": (
+                "The selected employee must have an active account."
+            )
+        })
+
+    if not employee.email_verified:
+        raise ValidationError({
+            "employee_id": (
+                "The selected employee must have a verified "
+                "email address."
+            )
+        })
 
     if get_customer_membership(employee) is not None:
-        raise PermissionDenied(
-            "Customer users cannot be assigned "
-            "as support agents."
-        )
+        raise ValidationError({
+            "employee_id": (
+                "A customer user cannot be assigned as a "
+                "support employee."
+            )
+        })
 
     if not (
         is_active_team_member(employee, team_id)
         or is_team_manager(employee, team_id)
     ):
-        raise PermissionDenied(
-            "The selected employee must be an active "
-            "member or manager of the support team."
-        )
+        raise ValidationError({
+            "employee_id": (
+                "The selected employee must be an active member "
+                "or manager of the selected support team."
+            )
+        })
 
 
 
@@ -359,8 +391,6 @@ def authorize_ticket_assignment(
         raise PermissionDenied(
             "You cannot access this ticket."
         )
-
-    validate_assignment_status(ticket)
 
     membership = get_customer_membership(user)
 
@@ -403,6 +433,8 @@ def authorize_ticket_assignment(
                     "You do not have permission to "
                     "select a support employee."
                 )
+
+        validate_assignment_status(ticket)
 
         # Customers cannot assign customer users as agents.
         if target_employee is not None:
@@ -485,6 +517,8 @@ def authorize_ticket_assignment(
                 "You cannot manage assignments "
                 "for this support team."
             )
+
+    validate_assignment_status(ticket)
 
     if target_team_id is not None:
         if not SupportTeam.objects.filter(

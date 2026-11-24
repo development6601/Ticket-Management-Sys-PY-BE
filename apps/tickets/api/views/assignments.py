@@ -44,8 +44,11 @@ class TicketAssignmentView(APIView):
         summary="Manage ticket assignment",
         description=(
             "Assign, reassign, unassign or transfer a ticket. "
-            "The operation is processed through the ticket "
-            "assignment service."
+            "This endpoint identifies the ticket by its internal UUID "
+            "(ticket_id, available as id in the ticket detail response), "
+            "not by ticket number. Requires tickets.assign, "
+            "tickets.reassign, tickets.unassign or tickets.transfer "
+            "according to the requested action."
         ),
     )
     def post(self, request, ticket_id):

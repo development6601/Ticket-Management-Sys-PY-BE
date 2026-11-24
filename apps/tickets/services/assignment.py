@@ -259,7 +259,7 @@ def change_ticket_assignment(
         ).first()
         if target_employee is None:
             raise ValidationError({
-                "assigned_employee": "Selected employee does not exist."
+                "employee_id": "The selected employee does not exist."
             })
 
     # 3. Authorize action (checks permissions, status, employee validity)

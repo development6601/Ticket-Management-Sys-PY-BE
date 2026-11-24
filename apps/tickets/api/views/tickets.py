@@ -35,12 +35,33 @@ from apps.tickets.services.ticket_creation import TicketCreationService
 from apps.tickets.services.ticket_update import TicketUpdateService
 from apps.tickets.services.visibility import (
     visible_tickets_queryset,
+    get_customer_membership
 )
 
 
 class CanCreateTicket(HasPermission):
     required_permission = TICKETS_CREATE
 
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        # Preserve the normal permission check.
+        if super().has_permission(request, view):
+            return True
+
+        membership = get_customer_membership(user)
+
+        return bool(
+            user.is_active
+            and membership is not None
+            and (
+                membership.is_primary_contact
+                or membership.role == CustomerUser.Role.ADMIN
+            )
+        )
 
 class CanViewTickets(HasPermission):
     required_permission = TICKETS_VIEW
@@ -429,25 +450,6 @@ class TicketCreateView(APIView):
                 )
             })
 
-        # Automatic routing:
-        # 1. Category's configured support team.
-        # 2. Company's default support team.
-        assigned_team = getattr(
-            category,
-            "default_support_team",
-            None,
-        )
-
-        if assigned_team is None:
-            assigned_team = getattr(
-                customer,
-                "default_support_team",
-                None,
-            )
-
-        if assigned_team and not assigned_team.is_active:
-            assigned_team = None
-
         ticket = TicketCreationService.create_ticket(
             customer_id=customer.pk,
             performed_by=request.user,
@@ -456,7 +458,7 @@ class TicketCreateView(APIView):
             category=category,
             initial_status=initial_status,
             priority=data.get("priority"),
-            assigned_team=assigned_team,
+            assigned_team=None,
             assigned_employee=None,
             due_at=data.get("due_at"),
         )
@@ -566,7 +568,12 @@ class TicketDetailUpdateView(APIView):
             "Update permitted ticket information such as subject, "
             "description, category, priority and due date. "
             "Status and assignment changes must use their "
-            "dedicated APIs. Requires tickets.update permission."
+            "dedicated APIs. Customer admins and primary contacts "
+            "may update subject, description, category and priority. "
+            "Customer members may update those fields on their own "
+            "tickets with tickets.update permission. Internal users "
+            "require tickets.update permission and may also update "
+            "the due date."
         ),
     )
 

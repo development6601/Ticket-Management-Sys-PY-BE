@@ -10,6 +10,7 @@ from apps.accounts.permissions.constants import TICKETS_UPDATE
 from apps.accounts.permissions.rbac import (
     user_has_effective_permission,
 )
+from apps.customers.models import CustomerUser
 from apps.tickets.models import (
     Ticket,
     TicketActivityLog,
@@ -19,6 +20,13 @@ from apps.tickets.services.visibility import (
     get_customer_membership,
     visible_tickets_queryset,
 )
+
+CUSTOMER_EDITABLE_FIELDS = {
+    "subject",
+    "description",
+    "category_id",
+    "priority",
+}
 
 
 class TicketUpdateService:
@@ -56,20 +64,46 @@ class TicketUpdateService:
                 .first()
             )
 
-            if ticket is None :
+            if ticket is None:
                 raise NotFound("Ticket not found.")
 
-            # STEP 2: Customer users cannot edit ticket information
-            # through this internal ticket update endpoint.
+            # STEP 2: Check customer update access and field limits.
             membership = get_customer_membership(user)
 
             if membership is not None:
-                raise PermissionDenied(
-                    "Customer users cannot update ticket information."
-                )
+                if membership.customer_id != ticket.customer_id:
+                    raise PermissionDenied(
+                        "You cannot update another company's ticket."
+                    )
 
-            # STEP 3: Check the existing RBAC permission.
-            if not user_has_effective_permission(
+                is_company_admin = (
+                    membership.is_primary_contact
+                    or membership.role == CustomerUser.Role.ADMIN
+                )
+                if not is_company_admin:
+                    if not (
+                        ticket.created_by_id == user.pk
+                        and user_has_effective_permission(
+                            user,
+                            TICKETS_UPDATE,
+                        )
+                    ):
+                        raise PermissionDenied(
+                            "You do not have permission to update "
+                            "this ticket."
+                        )
+
+                blocked = (
+                    set(validated_data.keys())
+                    - CUSTOMER_EDITABLE_FIELDS
+                )
+                if blocked:
+                    raise PermissionDenied(
+                        "Customers cannot update: "
+                        + ", ".join(sorted(blocked))
+                        + "."
+                    )
+            elif not user_has_effective_permission(
                 user,
                 TICKETS_UPDATE,
             ):
@@ -118,7 +152,6 @@ class TicketUpdateService:
 
                 setattr(ticket, field, new_value)
                 update_fields.append(field)
-
 
             # STEP 5: Validate and update the ticket category.
             if "category_id" in validated_data:

@@ -1,5 +1,9 @@
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.exceptions import (
+    NotFound,
+    ValidationError,
+)
 
 from apps.tickets.models import (
     TicketStatusTransition,
@@ -22,7 +26,6 @@ from apps.tickets.services.visibility import (
     is_system_admin,
     is_team_manager,
 )
-from rest_framework.exceptions import ValidationError
 
 
 def get_transition_action(from_status, to_status):
@@ -172,9 +175,14 @@ def execute_ticket_transition(
     )
 
     # Step 2: Load the requested destination.
-    to_status = TicketStatus.objects.get(
-        pk=to_status_id
-    )
+    try:
+        to_status = TicketStatus.objects.get(
+            pk=to_status_id
+        )
+    except TicketStatus.DoesNotExist:
+        raise NotFound(
+            "Target ticket status not found."
+        )
 
     # Step 3: Revalidate configuration and authorization
     # against the locked ticket's current state.
@@ -242,8 +250,6 @@ def execute_ticket_transition(
         if not is_active_team_member(
             user, ticket.assigned_team_id
         ):
-            from rest_framework.exceptions import ValidationError
-
             raise ValidationError({
                 "assigned_employee": (
                     "Only an eligible team agent "

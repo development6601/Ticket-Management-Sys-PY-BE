@@ -31,7 +31,7 @@ DEFAULT_TICKET_STATUSES = (
         "is_closed": False,
     },
     {
-        "name": "Done",
+        "name": "Closed",
         "description": "The resolution has been confirmed and the ticket is closed.",
         "position": 4,
         "is_initial": False,
@@ -52,6 +52,11 @@ def seed_customer_statuses(customer):
     existing_statuses = TicketStatus.objects.filter(
         customer=locked_customer
     )
+    legacy_done = existing_statuses.filter(name__iexact="Done", is_closed=True).first()
+    if legacy_done:
+        legacy_done.name = "Closed"
+        legacy_done.save(update_fields=["name", "updated_at"])
+
     # A company with existing statuses may already have a
     # customized workflow. Never overwrite that configuration.
     if existing_statuses.exists():

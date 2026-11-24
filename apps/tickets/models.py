@@ -190,7 +190,6 @@ class TicketCategory(BaseModel):
                 })
 
         if self.default_support_team_id:
-            # from apps.support.models import SupportTeam
 
             team = SupportTeam.objects.filter(
                 pk=self.default_support_team_id,
@@ -204,12 +203,12 @@ class TicketCategory(BaseModel):
                     )
                 })
 
-            def save(self, *args, **kwargs):
-                self.clean()
-                return super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
-            def __str__(self):
-                return self.name
+    def __str__(self):
+        return self.name
 
 class TicketStatus(BaseModel):
     customer = models.ForeignKey(

@@ -14,9 +14,9 @@ DEFAULT_TRANSITIONS = (
     ("New", "In Progress", "tickets.start"),
     ("New", "Resolved", "tickets.resolve"),
     ("In Progress", "Resolved", "tickets.resolve"),
-    ("Resolved", "Done", "tickets.close"),
+    ("Resolved", "Closed", "tickets.close"),
     ("Resolved", "In Progress", "tickets.reopen"),
-    ("Done", "In Progress", "tickets.reopen"),
+    ("Closed", "In Progress", "tickets.reopen"),
 )
 
 
@@ -42,6 +42,12 @@ def seed_customer_transitions(customer):
         )
     }
 
+    legacy_done = statuses.get("done")
+    if legacy_done and legacy_done.is_closed and "closed" not in statuses:
+        legacy_done.name = "Closed"
+        legacy_done.save(update_fields=["name", "updated_at"])
+        statuses["closed"] = legacy_done
+
     required_names = {
         name.casefold()
         for source, target, _ in DEFAULT_TRANSITIONS
@@ -61,7 +67,7 @@ def seed_customer_transitions(customer):
         "new": (True, False, False),
         "in progress": (False, False, False),
         "resolved": (False, True, False),
-        "done": (False, False, True),
+        "closed": (False, False, True),
     }
 
     for name, flags in expected_flags.items():
